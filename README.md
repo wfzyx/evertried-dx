@@ -25,6 +25,20 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
   floors, the tutorial and reloaded saved floors. Tunables in `Flawless.cs`: `AutoClearDelay`, `MaxFloor`.
   Hooks: `PlayerStatus.ApplyDamage` (epilogue), `LevelManager.EndCurrentLevel` and `StartLevel`.
 
+- **Controllers** - the game reads pads through Unity's legacy joystick axes, numbered for Windows XInput.
+  On Linux the same control lands on a different axis per driver: the right trigger shows up as the game's
+  d-pad X, the d-pad hat as its d-pad Y, triggers rest at -1. Result: menus only answer to the left stick
+  and the d-pad is swapped, dead or stuck. `DxPad` reads gamepads straight from evdev (`/dev/input/event*`)
+  instead, where the kernel reports every pad with the same codes (BTN_SOUTH/EAST/..., ABS_X/Y/RX/RY/Z/RZ,
+  ABS_HAT0X/Y or BTN_DPAD_*), and answers the game's own button and axis queries with the right values.
+  It follows whichever pad was used last (rescans every 2 s, so hot-plugging works) and falls through to
+  Unity's original behaviour if no pad can be opened. Face buttons are mapped by position, so
+  Xbox/Steam-virtual pads (xpad reports BTN_X/BTN_Y), PlayStation (hid-playstation) and Nintendo
+  (hid-nintendo) pads all give the same layout. The glyph set shown is still the one chosen in the game's
+  controller menu; it no longer affects how input is read. Hooks: `ControllerInputs.GetControllerValue`,
+  `InputHandler.GetControllerButtonIndex`, and every call to `Input.GetAxis`, `Input.GetAxisRaw` and
+  `Input.anyKeyDown`. Create `/tmp/evertried-dx-debug` to log each pad press in `Player.log`.
+
 ## Linux build fix
 The native Linux build does not start properly on current distros (glibc >= 2.41, e.g. Fedora 43+,
 SteamOS 3.7+): FMOD's libraries are flagged as needing an executable stack, glibc refuses to load

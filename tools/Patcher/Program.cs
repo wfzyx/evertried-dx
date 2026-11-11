@@ -175,6 +175,48 @@ void InsertBeforeEveryRet(MethodDefinition method, Func<Instruction[]> code)
     }
 }
 
+
+// Prologue that answers the call from the helper when it is active and otherwise falls through to the
+// original body: `if (Helper.Active()) { <replacement>; ret }`.
+void InsertGuardedReplacement(MethodDefinition method, MethodReference active, params Instruction[] replacement)
+{
+    method.Body.SimplifyMacros();
+    ILProcessor il = method.Body.GetILProcessor();
+    Instruction first = method.Body.Instructions[0];
+    il.InsertBefore(first, Instruction.Create(OpCodes.Call, active));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Brfalse, first));
+    foreach (Instruction ins in replacement)
+    {
+        il.InsertBefore(first, ins);
+    }
+    method.Body.OptimizeMacros();
+}
+
+// Every call to `fromFullName` anywhere in the game assembly now calls `to` instead (same signature).
+int RetargetCalls(string fromFullName, MethodReference to)
+{
+    int count = 0;
+    IEnumerable<TypeDefinition> Flatten(IEnumerable<TypeDefinition> types) =>
+        types.SelectMany(t => new[] { t }.Concat(Flatten(t.NestedTypes)));
+    foreach (TypeDefinition type in Flatten(module.Types))
+    {
+        foreach (MethodDefinition method in type.Methods.Where(m => m.HasBody))
+        {
+            foreach (Instruction ins in method.Body.Instructions)
+            {
+                if ((ins.OpCode == OpCodes.Call || ins.OpCode == OpCodes.Callvirt)
+                    && ins.Operand is MethodReference called && called.FullName == fromFullName)
+                {
+                    ins.OpCode = OpCodes.Call;
+                    ins.Operand = to;
+                    count++;
+                }
+            }
+        }
+    }
+    return count;
+}
+
 // --- Mastery: scale each tree before any SkillTreeData member reads it.
 MethodReference ensureScaled = Hook("MasteryScaler", "EnsureScaled");
 TypeDefinition tree = module.GetType("SkillTreeData");
@@ -212,6 +254,28 @@ InsertBeforeEveryRet(startLevel, () => new[]
     Instruction.Create(OpCodes.Call, afterStart),
 });
 Console.WriteLine("Flawless hooks installed");
+
+
+// --- Controller input: answer the game's pad queries from evdev (see DxPad) instead of Unity's
+// Windows-numbered joystick axes. Everything falls through to the original code when no pad is readable.
+MethodReference padActive = Hook("DxPad", "Active");
+MethodDefinition getControllerValue = module.GetType("ControllerInputs").Methods
+    .Single(m => m.Name == "GetControllerValue" && m.Parameters.Count == 2 && m.Parameters[0].ParameterType.FullName == "System.Int32");
+InsertGuardedReplacement(getControllerValue, padActive,
+    Instruction.Create(OpCodes.Ldarg_0),
+    Instruction.Create(OpCodes.Ldarg_1),
+    Instruction.Create(OpCodes.Call, Hook("DxPad", "Button")),
+    Instruction.Create(OpCodes.Ret));
+
+MethodDefinition buttonIndex = Find("InputHandler", "GetControllerButtonIndex", 1);
+InsertGuardedReplacement(buttonIndex, padActive,
+    Instruction.Create(OpCodes.Ldarg_1), // semantic index = the ControllerKeyCode itself
+    Instruction.Create(OpCodes.Ret));
+
+int axisRaw = RetargetCalls("System.Single UnityEngine.Input::GetAxisRaw(System.String)", Hook("DxPad", "GetAxisRaw"));
+int axis = RetargetCalls("System.Single UnityEngine.Input::GetAxis(System.String)", Hook("DxPad", "GetAxis"));
+int anyKey = RetargetCalls("System.Boolean UnityEngine.Input::get_anyKeyDown()", Hook("DxPad", "AnyKeyDown"));
+Console.WriteLine($"Controller hooks: 2 guarded methods, {axisRaw} GetAxisRaw, {axis} GetAxis, {anyKey} anyKeyDown call sites");
 
 foreach (MethodDefinition m in new[] { applyDamage, endLevel, startLevel }.Concat(tree.Methods.Where(x => x.HasBody)))
 {
