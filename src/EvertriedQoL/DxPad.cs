@@ -132,6 +132,7 @@ namespace EvertriedQoL
                 return;
             }
             frame = now;
+            DxHost.EnsureCreated();
 
             if (Time.realtimeSinceStartup >= nextScan)
             {

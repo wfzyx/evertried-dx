@@ -277,7 +277,44 @@ int axis = RetargetCalls("System.Single UnityEngine.Input::GetAxis(System.String
 int anyKey = RetargetCalls("System.Boolean UnityEngine.Input::get_anyKeyDown()", Hook("DxPad", "AnyKeyDown"));
 Console.WriteLine($"Controller hooks: 2 guarded methods, {axisRaw} GetAxisRaw, {axis} GetAxis, {anyKey} anyKeyDown call sites");
 
-foreach (MethodDefinition m in new[] { applyDamage, endLevel, startLevel }.Concat(tree.Methods.Where(x => x.HasBody)))
+// --- Boot splash: skippable with a face button / Start (see DxSplash).
+MethodDefinition splashStart = Find("SplashScreen", "Start", 0);
+MethodReference splashBegin = Hook("DxSplash", "Begin");
+InsertBeforeEveryRet(splashStart, () => new[]
+{
+    Instruction.Create(OpCodes.Ldarg_0),
+    Instruction.Create(OpCodes.Call, splashBegin),
+});
+MethodReference splashInBetween = Hook("DxSplash", "InBetween");
+MethodDefinition endSequence = module.GetType("SplashScreen").NestedTypes
+    .Single(t => t.Name.Contains("EndSequence_Routine")).Methods.Single(m => m.Name == "MoveNext" && m.HasBody);
+int waits = 0;
+{
+    ILProcessor il = endSequence.Body.GetILProcessor();
+    foreach (Instruction ins in endSequence.Body.Instructions.Where(i => i.OpCode == OpCodes.Ldfld && i.Operand is FieldReference f && f.Name == "inBetweenDuration").ToList())
+    {
+        il.InsertAfter(ins, Instruction.Create(OpCodes.Call, splashInBetween));
+        waits++;
+    }
+}
+if (waits != 1)
+{
+    return Fail("expected exactly one read of SplashScreen.inBetweenDuration, found " + waits);
+}
+
+// --- Settings: the "Gamepad Type" entry is now only a glyph set picker (see DxText).
+MethodDefinition getText = module.GetType("Localization.LocalizedTextData").Methods
+    .Single(m => m.Name == "GetText" && m.Parameters.Count == 1);
+MethodReference textFix = Hook("DxText", "Fix");
+InsertBeforeEveryRet(getText, () => new[]
+{
+    Instruction.Create(OpCodes.Ldarg_0),
+    Instruction.Create(OpCodes.Ldarg_1),
+    Instruction.Create(OpCodes.Call, textFix),
+});
+Console.WriteLine("Splash skip and glyph set label hooks installed");
+
+foreach (MethodDefinition m in new[] { applyDamage, endLevel, startLevel, splashStart, getText }.Concat(tree.Methods.Where(x => x.HasBody)))
 {
     m.Body.OptimizeMacros();
 }

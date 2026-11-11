@@ -38,6 +38,14 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
   controller menu; it no longer affects how input is read. Hooks: `ControllerInputs.GetControllerValue`,
   `InputHandler.GetControllerButtonIndex`, and every call to `Input.GetAxis`, `Input.GetAxisRaw` and
   `Input.anyKeyDown`. Create `/tmp/evertried-dx-debug` to log each pad press in `Player.log`.
+  The settings entry that used to read "Gamepad Type" now reads "Glyph Set" (localized text patched in
+  `DxText`), since it only picks the button icons.
+
+- **Skippable splash** - the boot splash (`DxSplash`) ends early on A/B/X/Y or Start on any gamepad, or Enter,
+  Space, Escape or a click. It fast-forwards the splash animators and drops the fixed wait the game adds
+  after loading the main menu. Hooks: `SplashScreen.Start` and the read of `SplashScreen.inBetweenDuration`.
+  While `/tmp/evertried-dx-debug` exists, `DxHost` also logs large dark UI panels and camera state to
+  `Player.log` (used to chase the black-panel-on-unpause bug).
 
 ## Linux build fix
 The native Linux build does not start properly on current distros (glibc >= 2.41, e.g. Fedora 43+,
