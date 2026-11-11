@@ -285,22 +285,6 @@ InsertBeforeEveryRet(splashStart, () => new[]
     Instruction.Create(OpCodes.Ldarg_0),
     Instruction.Create(OpCodes.Call, splashBegin),
 });
-MethodReference splashInBetween = Hook("DxSplash", "InBetween");
-MethodDefinition endSequence = module.GetType("SplashScreen").NestedTypes
-    .Single(t => t.Name.Contains("EndSequence_Routine")).Methods.Single(m => m.Name == "MoveNext" && m.HasBody);
-int waits = 0;
-{
-    ILProcessor il = endSequence.Body.GetILProcessor();
-    foreach (Instruction ins in endSequence.Body.Instructions.Where(i => i.OpCode == OpCodes.Ldfld && i.Operand is FieldReference f && f.Name == "inBetweenDuration").ToList())
-    {
-        il.InsertAfter(ins, Instruction.Create(OpCodes.Call, splashInBetween));
-        waits++;
-    }
-}
-if (waits != 1)
-{
-    return Fail("expected exactly one read of SplashScreen.inBetweenDuration, found " + waits);
-}
 
 // --- Settings: the "Gamepad Type" entry is now only a glyph set picker (see DxText).
 MethodDefinition getText = module.GetType("Localization.LocalizedTextData").Methods
@@ -314,7 +298,72 @@ InsertBeforeEveryRet(getText, () => new[]
 });
 Console.WriteLine("Splash skip and glyph set label hooks installed");
 
-foreach (MethodDefinition m in new[] { applyDamage, endLevel, startLevel, splashStart, getText }.Concat(tree.Methods.Where(x => x.HasBody)))
+// --- Glyph set must not change how input is read: the game swaps A/B and X/Y for the Switch glyph set.
+MethodDefinition switchInversion = Find("InputHandler", "PromptSwitchInversion", 1);
+InsertGuardedReplacement(switchInversion, padActive, Instruction.Create(OpCodes.Ret));
+
+// --- Ascend: starting a session happens once (see DxMenu).
+MethodDefinition startSession = Find("Evertried.MainMenu.MainMenu", "StartSession", 2);
+{
+    startSession.Body.SimplifyMacros();
+    ILProcessor il = startSession.Body.GetILProcessor();
+    Instruction first = startSession.Body.Instructions[0];
+    il.InsertBefore(first, Instruction.Create(OpCodes.Call, Hook("DxMenu", "TryBeginSession")));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Brtrue, first));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ret));
+    startSession.Body.OptimizeMacros();
+}
+MethodDefinition mainMenuStart = Find("Evertried.MainMenu.MainMenu", "Start", 0);
+InsertPrologue(mainMenuStart, Instruction.Create(OpCodes.Call, Hook("DxMenu", "Reset")));
+
+// --- Disable Focus Timer (a Windows-build option): save key, meter, and settings row.
+MethodDefinition gameDataKeys = Find("GameData", "GetKeys", 0);
+int renamed = 0;
+foreach (Instruction ins in gameDataKeys.Body.Instructions.Where(i => i.OpCode == OpCodes.Ldstr && (string)i.Operand == "GoldMultiplier"))
+{
+    ins.Operand = "FocusTimerDisabled";
+    renamed++;
+}
+MethodDefinition gameDataValues = Find("GameData", "GetCurrentValues", 0);
+Instruction blank = gameDataValues.Body.Instructions.First(i => i.OpCode == OpCodes.Ldstr && (string)i.Operand == "");
+blank.OpCode = OpCodes.Call; // the first "" is the array slot 1 that held the unused gold multiplier
+blank.Operand = Hook("DxFocus", "Serialize");
+if (renamed != 1)
+{
+    return Fail("expected one GoldMultiplier key in GameData.GetKeys, found " + renamed);
+}
+MethodDefinition gameDataLoad = Find("GameData", "LoadSavedData", 1);
+InsertBeforeEveryRet(gameDataLoad, () => new[]
+{
+    Instruction.Create(OpCodes.Ldarg_1),
+    Instruction.Create(OpCodes.Ldc_I4_1),
+    Instruction.Create(OpCodes.Ldelem_Ref),
+    Instruction.Create(OpCodes.Call, Hook("DxFocus", "Load")),
+});
+MethodDefinition gameDataDefaults = Find("GameData", "SetDefaultValues", 0);
+InsertPrologue(gameDataDefaults, Instruction.Create(OpCodes.Call, Hook("DxFocus", "Reset")));
+MethodDefinition timerMultiplier = module.GetType("FocusMeter").Methods.Single(m => m.Name == "get_TimerMultiplier");
+InsertBeforeEveryRet(timerMultiplier, () => new[] { Instruction.Create(OpCodes.Call, Hook("DxFocus", "Multiplier")) });
+
+TypeDefinition settingsPanel = module.GetType("SettingsPanel");
+FieldDefinition Field(string name) => settingsPanel.Fields.Single(f => f.Name == name);
+MethodDefinition panelStart = settingsPanel.Methods.Single(m => m.Name == "Start" && m.Parameters.Count == 0);
+InsertBeforeEveryRet(panelStart, () => new[]
+{
+    Instruction.Create(OpCodes.Ldarg_0),
+    Instruction.Create(OpCodes.Ldarg_0),
+    Instruction.Create(OpCodes.Ldfld, Field("controllerDropdown")),
+    Instruction.Create(OpCodes.Ldarg_0),
+    Instruction.Create(OpCodes.Ldfld, Field("movementDropdown")),
+    Instruction.Create(OpCodes.Call, Hook("DxSettings", "Setup")),
+});
+MethodDefinition panelElements = settingsPanel.Methods.Single(m => m.Name == "get_Elements");
+InsertBeforeEveryRet(panelElements, () => new[] { Instruction.Create(OpCodes.Call, Hook("DxSettings", "Elements")) });
+MethodDefinition panelToggle = settingsPanel.Methods.Single(m => m.Name == "Toggle" && m.Parameters.Count == 1);
+InsertPrologue(panelToggle, Instruction.Create(OpCodes.Call, Hook("DxSettings", "Refresh")));
+Console.WriteLine("Switch inversion guard, one-shot Ascend and Disable Focus Timer hooks installed");
+
+foreach (MethodDefinition m in new[] { applyDamage, endLevel, startLevel, splashStart, getText, gameDataLoad, gameDataDefaults, timerMultiplier, panelStart, panelElements, panelToggle, mainMenuStart }.Concat(tree.Methods.Where(x => x.HasBody)))
 {
     m.Body.OptimizeMacros();
 }

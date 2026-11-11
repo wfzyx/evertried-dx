@@ -41,11 +41,22 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
   The settings entry that used to read "Gamepad Type" now reads "Glyph Set" (localized text patched in
   `DxText`), since it only picks the button icons.
 
-- **Skippable splash** - the boot splash (`DxSplash`) ends early on A/B/X/Y or Start on any gamepad, or Enter,
-  Space, Escape or a click. It fast-forwards the splash animators and drops the fixed wait the game adds
-  after loading the main menu. Hooks: `SplashScreen.Start` and the read of `SplashScreen.inBetweenDuration`.
-  While `/tmp/evertried-dx-debug` exists, `DxHost` also logs large dark UI panels and camera state to
-  `Player.log` (used to chase the black-panel-on-unpause bug).
+- **Skippable splash** - the boot splash (`DxSplash`) takes one press per step: A/B/X/Y or Start on any gamepad
+  (or Enter, Space, Escape, a click) jumps to the start of the next fade-out of the part currently on screen.
+  The splash clip (`SplashScreen_Main`, 12.58 s) is a Dangen sting ending at 5.0 s, then three logos that fade
+  out at 6.58, 9.08 and 11.58 s. The game's stripped UnityEngine has no `Animator.Play`, so the clip position
+  is tracked in the helper and `Animator.speed` is raised just enough to land on the target. Hook:
+  `SplashScreen.Start`.
+- **Ascend runs once** - `MainMenu.StartSession` is guarded (`DxMenu`), so pressing Ascend again while its
+  animation plays cannot restart it or replay its sound.
+- **Glyph set is only glyphs** - `InputHandler.PromptSwitchInversion` (which swapped A/B and X/Y for the Switch
+  glyph set) does nothing while the evdev pad layer is active, and axis names are matched by prefix.
+- **Disable Focus Timer** - the Windows build has this setting (`GameData.FocusTimerDisabled`, a row under
+  "Controls"), the Linux depot (older) does not. `DxFocus` stores it in the save under the Windows key
+  (`GetKeys` slot 1, the Linux build's unused `GoldMultiplier`), stops `FocusMeter.TimerMultiplier` when on,
+  and `DxSettings` clones the "Controls" dropdown into a new row. Texts are the Windows build's.
+  While `/tmp/evertried-dx-debug` exists, the settings row layout and (via `DxHost`) large dark UI panels and
+  camera state are logged to `Player.log` (used to chase the black-panel-on-unpause bug).
 
 ## Linux build fix
 The native Linux build does not start properly on current distros (glibc >= 2.41, e.g. Fedora 43+,

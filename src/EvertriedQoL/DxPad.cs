@@ -105,19 +105,17 @@ namespace EvertriedQoL
         private static float Axis(string name, bool raw)
         {
             Ensure();
-            if (active != null)
+            if (active != null && name != null)
             {
-                switch (name)
-                {
-                    case "HorizontalLStick": return lx;
-                    case "VerticalLStick": return ly;
-                    case "HorizontalRStick": return rx;
-                    case "VerticalRStick": return ry;
-                    case "HorizontalDPad": return dx;
-                    case "VerticalDPad":
-                    case "VerticalDPadPS4": return dy;
-                    case "Triggers": return trigger;
-                }
+                // The game picks the axis name by glyph set (e.g. a PS4 variant of the vertical d-pad); every
+                // variant means the same physical control here, so match on the prefix.
+                if (name.StartsWith("HorizontalLStick")) { return lx; }
+                if (name.StartsWith("VerticalLStick")) { return ly; }
+                if (name.StartsWith("HorizontalRStick")) { return rx; }
+                if (name.StartsWith("VerticalRStick")) { return ry; }
+                if (name.StartsWith("HorizontalDPad")) { return dx; }
+                if (name.StartsWith("VerticalDPad")) { return dy; }
+                if (name.StartsWith("Triggers")) { return trigger; }
             }
             return raw ? Input.GetAxisRaw(name) : Input.GetAxis(name);
         }
