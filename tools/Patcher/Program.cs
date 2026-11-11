@@ -1,0 +1,168 @@
+using Mono.Cecil;
+using Mono.Cecil.Cil;
+using Mono.Cecil.Rocks;
+
+// Patches Assembly-CSharp.dll so it calls into EvertriedQoL.dll.
+//   Patcher install   <gameDir> <EvertriedQoL.dll> <backupDir>
+//   Patcher uninstall <gameDir> <backupDir>
+// The pristine Assembly-CSharp.dll is saved to <backupDir> on the first run and every install
+// patches a fresh copy of it, so installs are idempotent.
+
+static int Fail(string message)
+{
+    Console.Error.WriteLine("ERROR: " + message);
+    return 1;
+}
+
+if (args.Length < 1)
+{
+    return Fail("usage: Patcher install <gameDir> <helper.dll> <backupDir> | uninstall <gameDir> <backupDir>");
+}
+
+string mode = args[0];
+string gameDir = args[1];
+string managed = Path.Combine(gameDir, "Evertried_Release_Data", "Managed");
+string target = Path.Combine(managed, "Assembly-CSharp.dll");
+
+if (mode == "uninstall")
+{
+    string backupDirU = args[2];
+    string backupU = Path.Combine(backupDirU, "Assembly-CSharp.dll.orig");
+    if (!File.Exists(backupU))
+    {
+        return Fail("no backup at " + backupU);
+    }
+    File.Copy(backupU, target, true);
+    File.Delete(Path.Combine(managed, "EvertriedQoL.dll"));
+    Console.WriteLine("Restored original Assembly-CSharp.dll");
+    return 0;
+}
+
+if (mode != "install" || args.Length < 4)
+{
+    return Fail("bad arguments");
+}
+
+string helperPath = args[2];
+string backupDir = args[3];
+Directory.CreateDirectory(backupDir);
+string backup = Path.Combine(backupDir, "Assembly-CSharp.dll.orig");
+
+if (!File.Exists(backup))
+{
+    // Refuse to treat an already patched file as pristine.
+    using (AssemblyDefinition probe = AssemblyDefinition.ReadAssembly(target))
+    {
+        if (probe.MainModule.AssemblyReferences.Any(r => r.Name == "EvertriedQoL"))
+        {
+            return Fail("Assembly-CSharp.dll is already patched and there is no pristine backup; verify game files in Steam first");
+        }
+    }
+    File.Copy(target, backup);
+    Console.WriteLine("Saved pristine backup: " + backup);
+}
+
+DefaultAssemblyResolver resolver = new DefaultAssemblyResolver();
+resolver.AddSearchDirectory(managed);
+
+AssemblyDefinition helper = AssemblyDefinition.ReadAssembly(helperPath, new ReaderParameters { AssemblyResolver = resolver });
+
+// 1. Every member the helper uses must exist in the game's (stripped) assemblies.
+// Compiler-emitted custom attributes (CompilerGenerated, TargetFramework, ...) are stripped too, but
+// they are only metadata: the runtime never needs them to run the code.
+static bool IsAttributeMetadata(string fullName) => fullName.Contains("Attribute");
+
+int missing = 0;
+foreach (MemberReference member in helper.MainModule.GetMemberReferences())
+{
+    if (IsAttributeMetadata(member.DeclaringType.FullName))
+    {
+        continue;
+    }
+    bool ok;
+    try
+    {
+        ok = member switch
+        {
+            MethodReference m => m.Resolve() != null,
+            FieldReference f => f.Resolve() != null,
+            _ => true,
+        };
+    }
+    catch (Exception)
+    {
+        ok = false;
+    }
+    if (!ok)
+    {
+        missing++;
+        Console.Error.WriteLine("MISSING in game assemblies: " + member.FullName);
+    }
+}
+foreach (TypeReference type in helper.MainModule.GetTypeReferences())
+{
+    if (!IsAttributeMetadata(type.FullName) && type.Resolve() == null)
+    {
+        missing++;
+        Console.Error.WriteLine("MISSING type in game assemblies: " + type.FullName);
+    }
+}
+if (missing > 0)
+{
+    return Fail(missing + " member(s) used by the helper are stripped from the game");
+}
+
+// 2. Patch a fresh copy of the pristine assembly.
+ReaderParameters readParams = new ReaderParameters { AssemblyResolver = resolver, ReadWrite = false };
+AssemblyDefinition game = AssemblyDefinition.ReadAssembly(backup, readParams);
+ModuleDefinition module = game.MainModule;
+
+MethodReference Hook(string type, string name)
+{
+    MethodDefinition def = helper.MainModule.GetType("EvertriedQoL", type).Methods.Single(m => m.Name == name);
+    return module.ImportReference(def);
+}
+
+MethodDefinition Find(string type, string name, int paramCount)
+{
+    TypeDefinition t = module.GetType(type) ?? throw new InvalidOperationException("type not found: " + type);
+    return t.Methods.Single(m => m.Name == name && m.Parameters.Count == paramCount);
+}
+
+void InsertPrologue(MethodDefinition method, params Instruction[] code)
+{
+    method.Body.SimplifyMacros(); // long-form branches so inserted code cannot overflow short offsets
+    ILProcessor il = method.Body.GetILProcessor();
+    Instruction first = method.Body.Instructions[0];
+    foreach (Instruction ins in code)
+    {
+        il.InsertBefore(first, ins);
+    }
+    // Branches that looped back to the old first instruction now run the hook too; hooks injected
+    // as prologues must therefore be idempotent or cheap.
+}
+
+// --- Mastery: scale each tree before any SkillTreeData member reads it.
+MethodReference ensureScaled = Hook("MasteryScaler", "EnsureScaled");
+TypeDefinition tree = module.GetType("SkillTreeData");
+string[] skip = { "GrabValues", "SetMasteryTiers", "SetBaseMasteryEffects", "ParseEffects" };
+int treeMethods = 0;
+foreach (MethodDefinition method in tree.Methods.Where(m => m.HasBody && !m.IsStatic && !m.IsConstructor && !skip.Contains(m.Name)).ToList())
+{
+    InsertPrologue(method, Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Call, ensureScaled));
+    treeMethods++;
+}
+Console.WriteLine("Mastery hook: " + treeMethods + " SkillTreeData methods");
+
+foreach (MethodDefinition m in tree.Methods.Where(x => x.HasBody))
+{
+    m.Body.OptimizeMacros();
+}
+
+string tmp = target + ".patched.tmp";
+game.Write(tmp);
+game.Dispose();
+File.Move(tmp, target, true);
+File.Copy(helperPath, Path.Combine(managed, "EvertriedQoL.dll"), true);
+Console.WriteLine("Patched " + target);
+return 0;
