@@ -16,6 +16,15 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
   adds 1 xp and tiers are cumulative thresholds on `SkillTreeData`, so the thresholds are scaled once per
   skill tree before any of its data is read (this includes save loading).
 
+- **Flawless** - finish a combat floor without taking damage and the next combat floor clears itself.
+  After `AutoClearDelay` (1.5 s) input is locked, every hostile enemy is killed through the normal damage
+  path (so gold and xp are awarded; gold enemies first, because they pay nothing when they are the last one
+  standing) and the level victory is triggered once. An auto-cleared floor never earns the bonus, so at best
+  every other floor is skipped. Hits that are dodged or blocked by a shield do not count, and neither does
+  self-damage. Skipped: boss, store and special floors (the bonus carries over), endless mode, custom
+  floors, the tutorial and reloaded saved floors. Tunables in `Flawless.cs`: `AutoClearDelay`, `MaxFloor`.
+  Hooks: `PlayerStatus.ApplyDamage` (epilogue), `LevelManager.EndCurrentLevel` and `StartLevel`.
+
 ## Linux build fix
 The native Linux build does not start properly on current distros (glibc >= 2.41, e.g. Fedora 43+,
 SteamOS 3.7+): FMOD's libraries are flagged as needing an executable stack, glibc refuses to load

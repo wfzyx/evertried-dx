@@ -138,8 +138,41 @@ void InsertPrologue(MethodDefinition method, params Instruction[] code)
     {
         il.InsertBefore(first, ins);
     }
-    // Branches that looped back to the old first instruction now run the hook too; hooks injected
-    // as prologues must therefore be idempotent or cheap.
+    // Branches that looped back to the old first instruction now run the hook too, which is harmless
+    // for idempotent hooks but wrong for others; hooks used here are prologue-once-per-call safe.
+}
+
+void InsertBeforeEveryRet(MethodDefinition method, Func<Instruction[]> code)
+{
+    method.Body.SimplifyMacros();
+    ILProcessor il = method.Body.GetILProcessor();
+    foreach (Instruction ret in method.Body.Instructions.Where(i => i.OpCode == OpCodes.Ret).ToList())
+    {
+        Instruction[] block = code();
+        foreach (Instruction ins in block)
+        {
+            il.InsertBefore(ret, ins);
+        }
+        // Early-exit branches that targeted the ret must run the hook too.
+        foreach (Instruction other in method.Body.Instructions)
+        {
+            if (other.Operand == ret)
+            {
+                other.Operand = block[0];
+            }
+            else if (other.Operand is Instruction[] targets)
+            {
+                for (int k = 0; k < targets.Length; k++)
+                {
+                    if (targets[k] == ret)
+                    {
+                        targets[k] = block[0];
+                    }
+                }
+            }
+        }
+        // Exception handler ranges ending at ret are not expected: ret cannot be inside a protected region.
+    }
 }
 
 // --- Mastery: scale each tree before any SkillTreeData member reads it.
@@ -154,7 +187,33 @@ foreach (MethodDefinition method in tree.Methods.Where(m => m.HasBody && !m.IsSt
 }
 Console.WriteLine("Mastery hook: " + treeMethods + " SkillTreeData methods");
 
-foreach (MethodDefinition m in tree.Methods.Where(x => x.HasBody))
+// --- Flawless: damage / level end / level start.
+MethodDefinition applyDamage = Find("PlayerStatus", "ApplyDamage", 4);
+MethodReference onDamage = Hook("Flawless", "OnPlayerDamage");
+InsertBeforeEveryRet(applyDamage, () => new[]
+{
+    Instruction.Create(OpCodes.Dup),      // keep the bool result for the caller
+    Instruction.Create(OpCodes.Ldarg_1),  // amount
+    Instruction.Create(OpCodes.Ldarg_2),  // source
+    Instruction.Create(OpCodes.Call, onDamage),
+});
+
+MethodDefinition endLevel = Find("LevelManager", "EndCurrentLevel", 1);
+InsertPrologue(endLevel,
+    Instruction.Create(OpCodes.Ldarg_0),
+    Instruction.Create(OpCodes.Ldarg_1),
+    Instruction.Create(OpCodes.Call, Hook("Flawless", "OnBeforeLevelEnd")));
+
+MethodDefinition startLevel = Find("LevelManager", "StartLevel", 0);
+MethodReference afterStart = Hook("Flawless", "OnAfterLevelStart");
+InsertBeforeEveryRet(startLevel, () => new[]
+{
+    Instruction.Create(OpCodes.Ldarg_0),
+    Instruction.Create(OpCodes.Call, afterStart),
+});
+Console.WriteLine("Flawless hooks installed");
+
+foreach (MethodDefinition m in new[] { applyDamage, endLevel, startLevel }.Concat(tree.Methods.Where(x => x.HasBody)))
 {
     m.Body.OptimizeMacros();
 }
