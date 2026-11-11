@@ -204,6 +204,19 @@ namespace EvertriedQoL
             }
             active = pad;
             Debug.Log("[EvertriedQoL] Active gamepad: " + pad + (Layout.PositionalFaceButtons(pad) ? " (positional face buttons)" : " (Xbox-labelled face buttons)"));
+            // The game picked its axis names before a pad was active; pick them again now that one is.
+            try
+            {
+                InputHandler handler = AutomatedSingleton<InputHandler>.Instance;
+                if (handler != null)
+                {
+                    handler.OnControllerModeChange(ScriptableSingleton<InputSettings>.Instance.ControllerType);
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.Log("[EvertriedQoL] Could not refresh the axis names: " + e.Message);
+            }
         }
 
         private static void Poll()

@@ -13,11 +13,20 @@ namespace EvertriedQoL
     /// </summary>
     public static class DxSplash
     {
-        // Times (seconds into the Main clip) a press can jump to; the last one lets TriggerEnd fire.
-        private static readonly float[] Targets = { 5.0f, 6.583f, 9.083f, 11.583f, 12.05f };
+        // Times (seconds into the Main clip) a press can jump to: the end of the Dangen sting and the start of
+        // each logo's fade-out. The fade itself then plays at normal speed.
+        private static readonly float[] Targets = { 5.0f, 6.583f, 9.083f, 11.583f };
+
+        // Presses count only while something is held on screen: the Dangen sting and each logo between its
+        // fade-in and fade-out. Fades, the gaps between logos and fast-forwarding ignore input.
+        private static readonly float[] WindowStart = { 0.6f, 5.583f, 8.083f, 10.583f };
+        private static readonly float[] WindowEnd = { 5.0f, 6.583f, 9.083f, 11.583f };
+
+        // The End clip (the fade that reveals the title screen) is 2.0 s long; its Dispose event fires at its start.
+        private const float EndFadeSeconds = 2.25f;
+        private static float unblockAt;
         private const float Margin = 0.05f;
         private const float MaxSpeed = 40f;
-        private const float MinPressTime = 0.6f; // let the opening sting start before it can be skipped
 
         public static void Begin(SplashScreen splash)
         {
@@ -55,7 +64,7 @@ namespace EvertriedQoL
                 if (animator.enabled)
                 {
                     float dt = Time.unscaledDeltaTime;
-                    if (SkipPressed() && clip > MinPressTime)
+                    if (target < 0f && InWindow(clip) && SkipPressed())
                     {
                         float from = target > 0f ? target : clip;
                         for (int i = 0; i < Targets.Length; i++)
@@ -95,6 +104,30 @@ namespace EvertriedQoL
             {
                 animator.speed = 1f;
             }
+        }
+
+        private static bool InWindow(float clip)
+        {
+            for (int i = 0; i < WindowStart.Length; i++)
+            {
+                if (clip >= WindowStart[i] && clip < WindowEnd[i] - Margin)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>SplashScreen.Dispose prologue: the title screen starts fading in now.</summary>
+        public static void OnDispose()
+        {
+            unblockAt = Time.realtimeSinceStartup + EndFadeSeconds;
+        }
+
+        /// <summary>MainMenu.ActiveUpdate prologue: no menu input until the title screen has finished fading in.</summary>
+        public static bool InputBlocked()
+        {
+            return Time.realtimeSinceStartup < unblockAt;
         }
 
         private static bool SkipPressed()

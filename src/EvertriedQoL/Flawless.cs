@@ -49,7 +49,11 @@ namespace EvertriedQoL
             {
                 return;
             }
-            if (level.LevelType != LevelType.Default || !ModeAllowed())
+            // Floor 1 is typed Start but is an ordinary combat floor once the tutorial is done. Stores, NPC
+            // (Special) floors, bosses and breaks never earn the reward.
+            bool combat = level.LevelType == LevelType.Default
+                || (level.LevelType == LevelType.Start && !(level.Tutorial != null && level.Tutorial.Active));
+            if (!combat || !ModeAllowed())
             {
                 return;
             }
@@ -67,6 +71,10 @@ namespace EvertriedQoL
             epoch++;
             tookDamage = false;
             currentFloorAutoCleared = false;
+            if (level.LevelIndex == 0)
+            {
+                pending = false; // a new run never inherits a bonus from the previous one
+            }
             if (!pending || !CanAutoClear(level))
             {
                 return;

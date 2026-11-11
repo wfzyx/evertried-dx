@@ -306,6 +306,34 @@ InsertBeforeEveryRet(pixelStart, () => new[]
     Instruction.Create(OpCodes.Call, Hook("DxPixel", "Fix")),
 });
 
+// --- Glyph set must not pick the d-pad axis names: with PS4 the game reads its horizontal d-pad from
+// "VerticalDPad" (a Windows hat quirk), which DxPad cannot tell apart from the real vertical d-pad.
+MethodDefinition axisType = Find("Axis", "OnControllerTypeChange", 1);
+{
+    axisType.Body.SimplifyMacros();
+    ILProcessor il = axisType.Body.GetILProcessor();
+    Instruction first = axisType.Body.Instructions[0];
+    il.InsertBefore(first, Instruction.Create(OpCodes.Call, padActive));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Brfalse, first));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ldc_I4_0)); // ControllerType.XBOX
+    il.InsertBefore(first, Instruction.Create(OpCodes.Starg, axisType.Parameters[0]));
+    axisType.Body.OptimizeMacros();
+}
+
+// --- Title screen: no menu input until its fade-in has finished (see DxSplash).
+MethodDefinition splashDispose = Find("SplashScreen", "Dispose", 0);
+InsertPrologue(splashDispose, Instruction.Create(OpCodes.Call, Hook("DxSplash", "OnDispose")));
+MethodDefinition menuUpdate = Find("Evertried.MainMenu.MainMenu", "ActiveUpdate", 0);
+{
+    menuUpdate.Body.SimplifyMacros();
+    ILProcessor il = menuUpdate.Body.GetILProcessor();
+    Instruction first = menuUpdate.Body.Instructions[0];
+    il.InsertBefore(first, Instruction.Create(OpCodes.Call, Hook("DxSplash", "InputBlocked")));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Brfalse, first));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ret));
+    menuUpdate.Body.OptimizeMacros();
+}
+
 // --- Glyph set must not change how input is read: the game swaps A/B and X/Y for the Switch glyph set.
 MethodDefinition switchInversion = Find("InputHandler", "PromptSwitchInversion", 1);
 InsertGuardedReplacement(switchInversion, padActive, Instruction.Create(OpCodes.Ret));
@@ -371,7 +399,7 @@ MethodDefinition panelToggle = settingsPanel.Methods.Single(m => m.Name == "Togg
 InsertPrologue(panelToggle, Instruction.Create(OpCodes.Call, Hook("DxSettings", "Refresh")));
 Console.WriteLine("Switch inversion guard, one-shot Ascend and Disable Focus Timer hooks installed");
 
-foreach (MethodDefinition m in new[] { applyDamage, endLevel, startLevel, splashStart, getText, gameDataLoad, gameDataDefaults, timerMultiplier, panelStart, panelElements, panelToggle, mainMenuStart, pixelStart }.Concat(tree.Methods.Where(x => x.HasBody)))
+foreach (MethodDefinition m in new[] { applyDamage, endLevel, startLevel, splashStart, getText, gameDataLoad, gameDataDefaults, timerMultiplier, panelStart, panelElements, panelToggle, mainMenuStart, pixelStart, splashDispose }.Concat(tree.Methods.Where(x => x.HasBody)))
 {
     m.Body.OptimizeMacros();
 }

@@ -42,7 +42,9 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
   `DxText`), since it only picks the button icons.
 
 - **Skippable splash** - the boot splash (`DxSplash`) takes one press per step: A/B/X/Y or Start on any gamepad
-  (or Enter, Space, Escape, a click) jumps to the start of the next fade-out of the part currently on screen.
+  (or Enter, Space, Escape, a click) jumps to the start of the next fade-out of the part currently on screen,
+  and that fade plays normally. Presses only count while a logo is held (not during fades or the gaps), and the
+  title screen ignores input until its 2 s fade-in is over (`MainMenu.ActiveUpdate` guard).
   The splash clip (`SplashScreen_Main`, 12.58 s) is a Dangen sting ending at 5.0 s, then three logos that fade
   out at 6.58, 9.08 and 11.58 s. The game's stripped UnityEngine has no `Animator.Play`, so the clip position
   is tracked in the helper and `Animator.speed` is raised just enough to land on the target. Hook:
@@ -50,7 +52,10 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
 - **Ascend runs once** - `MainMenu.StartSession` is guarded (`DxMenu`), so pressing Ascend again while its
   animation plays cannot restart it or replay its sound.
 - **Glyph set is only glyphs** - `InputHandler.PromptSwitchInversion` (which swapped A/B and X/Y for the Switch
-  glyph set) does nothing while the evdev pad layer is active, and axis names are matched by prefix.
+  glyph set) does nothing while the evdev pad layer is active, and axis names are matched by prefix. The PS4
+  glyph set also reads its horizontal d-pad from the axis named `VerticalDPad`, which prefix matching cannot
+  tell from the real vertical d-pad, so `Axis.OnControllerTypeChange` always picks the Xbox names while a pad
+  is active (and the game is told again when a pad becomes active).
 - **Disable Focus Timer** - the Windows build has this setting (`GameData.FocusTimerDisabled`, a row under
   "Controls"), the Linux depot (older) does not. `DxFocus` stores it in the save under the Windows key
   (`GetKeys` slot 1, the Linux build's unused `GoldMultiplier`), stops `FocusMeter.TimerMultiplier` when on,
