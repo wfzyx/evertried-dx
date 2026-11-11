@@ -1,0 +1,27 @@
+# evertried-dx
+
+Quality-of-life and rebalance patches for **Evertried** (native Linux Steam build, Unity 2019.4 Mono,
+Steam app id `1607040`). Nothing from the game is redistributed: the tools here modify your own
+installed copy and keep backups of every file they touch.
+
+## Linux build fix
+The native Linux build does not start properly on current distros (glibc >= 2.41, e.g. Fedora 43+,
+SteamOS 3.7+): FMOD's libraries are flagged as needing an executable stack, glibc refuses to load
+them, and the game runs without audio (`DllNotFoundException: fmodstudio` in `Player.log`).
+`tools/fix_fmod.py` clears that flag.
+
+    ./install.sh              # patches libfmodstudio*.so, originals go to ~/.local/share/evertried-mods/backup
+    ./install.sh uninstall    # puts the originals back
+
+A Steam update or "verify files" reverts it; run `./install.sh` again.
+
+## Moving a Proton/Wine save to the native build
+Under Proton, Unity keeps PlayerPrefs in the Wine registry. `tools/reg2prefs.py` converts the
+`[Software\\Dan Domingues & Lunic Games\\Evertried]` section of `<prefix>/pfx/user.reg` into the
+native `~/.config/unity3d/Dan Domingues & Lunic Games/Evertried/prefs` file. Close the game first;
+the target is backed up as `prefs.bak-<timestamp>` and device-specific keys are kept from it.
+
+    python3 tools/reg2prefs.py ~/.local/share/Steam/steamapps/compatdata/1607040/pfx/user.reg \
+        "$HOME/.config/unity3d/Dan Domingues & Lunic Games/Evertried/prefs" [--dry-run]
+
+The game has no Steam Cloud support, so saves are never synced; back up `prefs` yourself.
