@@ -298,6 +298,14 @@ InsertBeforeEveryRet(getText, () => new[]
 });
 Console.WriteLine("Splash skip and glyph set label hooks installed");
 
+// --- Black world on Linux: skip the BilinearSharp upscale shader (see DxPixel).
+MethodDefinition pixelStart = Find("PixelArtCamera", "Start", 0);
+InsertBeforeEveryRet(pixelStart, () => new[]
+{
+    Instruction.Create(OpCodes.Ldarg_0),
+    Instruction.Create(OpCodes.Call, Hook("DxPixel", "Fix")),
+});
+
 // --- Glyph set must not change how input is read: the game swaps A/B and X/Y for the Switch glyph set.
 MethodDefinition switchInversion = Find("InputHandler", "PromptSwitchInversion", 1);
 InsertGuardedReplacement(switchInversion, padActive, Instruction.Create(OpCodes.Ret));
@@ -363,7 +371,7 @@ MethodDefinition panelToggle = settingsPanel.Methods.Single(m => m.Name == "Togg
 InsertPrologue(panelToggle, Instruction.Create(OpCodes.Call, Hook("DxSettings", "Refresh")));
 Console.WriteLine("Switch inversion guard, one-shot Ascend and Disable Focus Timer hooks installed");
 
-foreach (MethodDefinition m in new[] { applyDamage, endLevel, startLevel, splashStart, getText, gameDataLoad, gameDataDefaults, timerMultiplier, panelStart, panelElements, panelToggle, mainMenuStart }.Concat(tree.Methods.Where(x => x.HasBody)))
+foreach (MethodDefinition m in new[] { applyDamage, endLevel, startLevel, splashStart, getText, gameDataLoad, gameDataDefaults, timerMultiplier, panelStart, panelElements, panelToggle, mainMenuStart, pixelStart }.Concat(tree.Methods.Where(x => x.HasBody)))
 {
     m.Body.OptimizeMacros();
 }

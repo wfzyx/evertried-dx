@@ -40,6 +40,14 @@ namespace EvertriedQoL
                 copy.transform.SetParent(parent, false);
                 copy.transform.SetSiblingIndex(movement.transform.GetSiblingIndex() + 1);
 
+                // The "Controls" dropdown has a LocalizedDropdown that rewrites its names ("Normal", "Inverted",
+                // "Custom") on every language change; the copy must not inherit it.
+                LocalizedDropdown[] localized = copy.GetComponentsInChildren<LocalizedDropdown>(true);
+                for (int i = 0; i < localized.Length; i++)
+                {
+                    Object.DestroyImmediate(localized[i]);
+                }
+
                 DropdownSettingElement dropdown = copy.GetComponent<DropdownSettingElement>();
                 dropdown.Setup();
                 dropdown.SetNames(new[] { No, Yes });

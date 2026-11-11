@@ -55,8 +55,15 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
   "Controls"), the Linux depot (older) does not. `DxFocus` stores it in the save under the Windows key
   (`GetKeys` slot 1, the Linux build's unused `GoldMultiplier`), stops `FocusMeter.TimerMultiplier` when on,
   and `DxSettings` clones the "Controls" dropdown into a new row. Texts are the Windows build's.
-  While `/tmp/evertried-dx-debug` exists, the settings row layout and (via `DxHost`) large dark UI panels and
-  camera state are logged to `Player.log` (used to chase the black-panel-on-unpause bug).
+  While `/tmp/evertried-dx-debug` exists, the settings row layout and (via `DxHost`) large dark UI panels,
+  cameras and the pixel camera are logged to `Player.log`, and `/tmp/evertried-dx-exp` accepts live
+  experiments (see `DxHost.RunExperiments`).
+
+- **No black world** - after a level starts or the game is unpaused the world went black on the native Linux
+  build under gamescope (HUD fine, `Player.log` clean). Live experiments isolated it to the game's
+  `Hidden/BilinearSharp` upscale shader (`PixelArtCamera.useUpscaleShader`); the game's other path (integer
+  point-filtered upscale + stretch) never goes black and is crisper, so `DxPixel` switches to it when the
+  pixel camera starts.
 
 ## Linux build fix
 The native Linux build does not start properly on current distros (glibc >= 2.41, e.g. Fedora 43+,
