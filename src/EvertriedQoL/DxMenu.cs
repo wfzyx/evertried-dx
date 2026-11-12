@@ -4,6 +4,7 @@ namespace EvertriedQoL
     public static class DxMenu
     {
         private static bool sessionStarting;
+        private static bool leaving;
 
         /// <summary>True from the moment a run is chosen until the menu scene is left: no menu input meanwhile.</summary>
         public static bool SessionStarting
@@ -11,22 +12,23 @@ namespace EvertriedQoL
             get { return sessionStarting; }
         }
 
-        /// <summary>True while the game is leaving a run for the main menu (pause or game-over panels, behind a fade).</summary>
+        /// <summary>True while a run is being started or left (behind a fade): no panel may read input.</summary>
         public static bool InputLocked()
         {
-            return sessionStarting;
+            return sessionStarting || leaving;
         }
 
         /// <summary>PausePanel.ToMainMenu / GameplayCanvas.MainMenu prologue: lock panel input until the menu scene loads.</summary>
         public static void BeginLeave()
         {
-            sessionStarting = true;
+            leaving = true;
         }
 
-        /// <summary>MainMenu.Start: a fresh menu, a fresh chance to start a run.</summary>
+        /// <summary>MainMenu.Start / LevelManager.Awake: a fresh menu, a fresh chance to start a run.</summary>
         public static void Reset()
         {
             sessionStarting = false;
+            leaving = false;
         }
 
         /// <summary>

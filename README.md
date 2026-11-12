@@ -53,8 +53,9 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
   animation plays cannot restart it or replay its sound.
 - **Ascend input lock** - while the Ascend animation plays after a run is chosen, the main menu ignores input
   (`DxMenu.SessionStarting` feeds the `MainMenu.ActiveUpdate` guard).
-- **Leave-run input lock** - leaving a run for the main menu (pause menu or game over) fades out; the pause and
-  game-over panels ignore input until the menu scene loads.
+- **Run start/leave input lock** - while a run starts (Ascend animation, including the mastery picker) or is left
+  (pause menu or game over to the main menu), every panel ignores input (`PanelControllable.Update` guard).
+  Cleared when the next scene starts.
 - **Faster title fade-in** - the splash End clip (2.0 s) is played at 2.0/1.75 speed so the fade takes 1.75 s;
   the menu accepts input when it is over.
 - **Mark follows the Denial boss** - the floor 10 boss (`Boss_Smoke`) has no body of its own (smoke cells move around

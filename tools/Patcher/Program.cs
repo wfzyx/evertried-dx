@@ -381,9 +381,9 @@ MethodDefinition startSession = Find("Evertried.MainMenu.MainMenu", "StartSessio
 // --- Leaving a run for the main menu: the fade must not accept input (pause and game-over panels).
 InsertPrologue(Find("PausePanel", "ToMainMenu", 0), Instruction.Create(OpCodes.Call, Hook("DxMenu", "BeginLeave")));
 InsertPrologue(Find("GameplayCanvas", "MainMenu", 0), Instruction.Create(OpCodes.Call, Hook("DxMenu", "BeginLeave")));
-foreach (string panel in new[] { "PausePanel", "GameOverPanel" })
+// Every panel (pause, game over, mastery picker, ...) reads input through PanelControllable.Update.
+MethodDefinition panelUpdate = Find("PanelControllable", "Update", 0);
 {
-    MethodDefinition panelUpdate = Find(panel, "ActiveUpdate", 0);
     panelUpdate.Body.SimplifyMacros();
     ILProcessor il = panelUpdate.Body.GetILProcessor();
     Instruction first = panelUpdate.Body.Instructions[0];
@@ -392,6 +392,7 @@ foreach (string panel in new[] { "PausePanel", "GameOverPanel" })
     il.InsertBefore(first, Instruction.Create(OpCodes.Ret));
     panelUpdate.Body.OptimizeMacros();
 }
+InsertPrologue(Find("LevelManager", "Awake", 0), Instruction.Create(OpCodes.Call, Hook("DxMenu", "Reset")));
 MethodDefinition mainMenuStart = Find("Evertried.MainMenu.MainMenu", "Start", 0);
 InsertPrologue(mainMenuStart, Instruction.Create(OpCodes.Call, Hook("DxMenu", "Reset")));
 
