@@ -5,6 +5,12 @@ namespace EvertriedQoL
     {
         private static bool sessionStarting;
 
+        /// <summary>True from the moment a run is chosen until the menu scene is left: no menu input meanwhile.</summary>
+        public static bool SessionStarting
+        {
+            get { return sessionStarting; }
+        }
+
         /// <summary>MainMenu.Start: a fresh menu, a fresh chance to start a run.</summary>
         public static void Reset()
         {

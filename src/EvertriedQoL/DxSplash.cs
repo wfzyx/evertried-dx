@@ -22,8 +22,10 @@ namespace EvertriedQoL
         private static readonly float[] WindowStart = { 0.6f, 5.583f, 8.083f, 10.583f };
         private static readonly float[] WindowEnd = { 5.0f, 6.583f, 9.083f, 11.583f };
 
-        // The End clip (the fade that reveals the title screen) is 2.0 s long; its Dispose event fires at its start.
-        private const float EndFadeSeconds = 2.25f;
+        // The End clip (the fade that reveals the title screen) is 2.0 s long and its Dispose event fires at its
+        // start. It is played faster so that the fade takes FadeSeconds.
+        private const float EndClipSeconds = 2.0f;
+        private const float FadeSeconds = 1.75f;
         private static float unblockAt;
         private const float Margin = 0.05f;
         private const float MaxSpeed = 40f;
@@ -119,15 +121,23 @@ namespace EvertriedQoL
         }
 
         /// <summary>SplashScreen.Dispose prologue: the title screen starts fading in now.</summary>
-        public static void OnDispose()
+        public static void OnDispose(SplashScreen splash)
         {
-            unblockAt = Time.realtimeSinceStartup + EndFadeSeconds;
+            unblockAt = Time.realtimeSinceStartup + FadeSeconds;
+            Animator[] animators = splash.GetComponentsInChildren<Animator>(true);
+            for (int i = 0; i < animators.Length; i++)
+            {
+                animators[i].speed = EndClipSeconds / FadeSeconds;
+            }
         }
 
-        /// <summary>MainMenu.ActiveUpdate prologue: no menu input until the title screen has finished fading in.</summary>
+        /// <summary>
+        /// MainMenu.ActiveUpdate prologue: no menu input until the title screen has finished fading in, and none
+        /// while the "Ascend" animation plays after a run was chosen.
+        /// </summary>
         public static bool InputBlocked()
         {
-            return Time.realtimeSinceStartup < unblockAt;
+            return Time.realtimeSinceStartup < unblockAt || DxMenu.SessionStarting;
         }
 
         private static bool SkipPressed()

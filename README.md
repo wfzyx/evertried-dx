@@ -51,6 +51,15 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
   `SplashScreen.Start`.
 - **Ascend runs once** - `MainMenu.StartSession` is guarded (`DxMenu`), so pressing Ascend again while its
   animation plays cannot restart it or replay its sound.
+- **Ascend input lock** - while the Ascend animation plays after a run is chosen, the main menu ignores input
+  (`DxMenu.SessionStarting` feeds the `MainMenu.ActiveUpdate` guard).
+- **Faster title fade-in** - the splash End clip (2.0 s) is played at 2.0/1.75 speed so the fade takes 1.75 s;
+  the menu accepts input when it is over.
+- **Mark follows the Denial boss** - the floor 10 boss (`Boss_Smoke`) has no body of its own (smoke cells move around
+  and one is vulnerable); a Mark was parented to its fixed root and stayed on the ground. `DxBoss` re-parents
+  the mark effect to the vulnerable cell (the Windows build overrides `ApplyMark` for this boss).
+- **New skill slot cue** - the Windows build animates a freshly gained slot with a new outline shader/material
+  that the Linux data lacks; `DxSlot` blinks the slot's outline instead.
 - **Glyph set is only glyphs** - `InputHandler.PromptSwitchInversion` (which swapped A/B and X/Y for the Switch
   glyph set) does nothing while the evdev pad layer is active, and axis names are matched by prefix. The PS4
   glyph set also reads its horizontal d-pad from the axis named `VerticalDPad`, which prefix matching cannot

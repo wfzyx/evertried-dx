@@ -322,7 +322,7 @@ MethodDefinition axisType = Find("Axis", "OnControllerTypeChange", 1);
 
 // --- Title screen: no menu input until its fade-in has finished (see DxSplash).
 MethodDefinition splashDispose = Find("SplashScreen", "Dispose", 0);
-InsertPrologue(splashDispose, Instruction.Create(OpCodes.Call, Hook("DxSplash", "OnDispose")));
+InsertPrologue(splashDispose, Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Call, Hook("DxSplash", "OnDispose")));
 MethodDefinition menuUpdate = Find("Evertried.MainMenu.MainMenu", "ActiveUpdate", 0);
 {
     menuUpdate.Body.SimplifyMacros();
@@ -333,6 +333,35 @@ MethodDefinition menuUpdate = Find("Evertried.MainMenu.MainMenu", "ActiveUpdate"
     il.InsertBefore(first, Instruction.Create(OpCodes.Ret));
     menuUpdate.Body.OptimizeMacros();
 }
+
+// --- Denial boss: its Mark follows the vulnerable cell (see DxBoss).
+TypeDefinition smokeBoss = module.GetType("Boss_Smoke");
+MethodDefinition markMethod = Find("EnemyBase", "ApplyMark", 1);
+InsertPrologue(markMethod, Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Call, Hook("DxBoss", "BeforeMark")));
+InsertBeforeEveryRet(markMethod, () => new[]
+{
+    Instruction.Create(OpCodes.Ldarg_0),
+    Instruction.Create(OpCodes.Ldarg_1),
+    Instruction.Create(OpCodes.Call, Hook("DxBoss", "AfterMark")),
+});
+FieldDefinition vulnerableField = smokeBoss.Fields.Single(f => f.Name == "vulnerableCell");
+MethodDefinition reassignSpot = smokeBoss.Methods.Single(m => m.Name == "ReassignVulnerableSpot" && m.Parameters.Count == 0);
+InsertBeforeEveryRet(reassignSpot, () => new[]
+{
+    Instruction.Create(OpCodes.Ldarg_0),
+    Instruction.Create(OpCodes.Ldfld, vulnerableField),
+    Instruction.Create(OpCodes.Call, Hook("DxBoss", "SetVulnerable")),
+});
+MethodDefinition clearCells = smokeBoss.Methods.Single(m => m.Name == "ClearCellGroups" && m.Parameters.Count == 0);
+InsertPrologue(clearCells, Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Call, Hook("DxBoss", "CellsClearing")));
+
+// --- New skill slot: a visible cue (see DxSlot).
+MethodDefinition addSlot = Find("PlayerCombat", "AddSkillSlot", 0);
+InsertBeforeEveryRet(addSlot, () => new[]
+{
+    Instruction.Create(OpCodes.Ldarg_0),
+    Instruction.Create(OpCodes.Call, Hook("DxSlot", "Added")),
+});
 
 // --- Glyph set must not change how input is read: the game swaps A/B and X/Y for the Switch glyph set.
 MethodDefinition switchInversion = Find("InputHandler", "PromptSwitchInversion", 1);
@@ -399,7 +428,7 @@ MethodDefinition panelToggle = settingsPanel.Methods.Single(m => m.Name == "Togg
 InsertPrologue(panelToggle, Instruction.Create(OpCodes.Call, Hook("DxSettings", "Refresh")));
 Console.WriteLine("Switch inversion guard, one-shot Ascend and Disable Focus Timer hooks installed");
 
-foreach (MethodDefinition m in new[] { applyDamage, endLevel, startLevel, splashStart, getText, gameDataLoad, gameDataDefaults, timerMultiplier, panelStart, panelElements, panelToggle, mainMenuStart, pixelStart, splashDispose }.Concat(tree.Methods.Where(x => x.HasBody)))
+foreach (MethodDefinition m in new[] { applyDamage, endLevel, startLevel, splashStart, getText, gameDataLoad, gameDataDefaults, timerMultiplier, panelStart, panelElements, panelToggle, mainMenuStart, pixelStart, splashDispose, markMethod, reassignSpot, clearCells, addSlot }.Concat(tree.Methods.Where(x => x.HasBody)))
 {
     m.Body.OptimizeMacros();
 }
