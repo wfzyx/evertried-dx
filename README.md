@@ -12,18 +12,23 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
 `Assembly-CSharp.dll` it saved to the backup folder, so reinstalling is safe.
 
 ## Features
-- **Mastery** - every skill-mastery tier needs half the casts (`MasteryScaler.Factor`). Each skill cast
-  adds 1 xp and tiers are cumulative thresholds on `SkillTreeData`, so the thresholds are scaled once per
-  skill tree before any of its data is read (this includes save loading).
+- **Mastery** - skills with real mastery data (the game's 120/240/720 table) unlock their tiers at 80, 160 and
+  240 casts (`MasteryScaler.CastsPerTier`, 80 casts per tier). The few trees that only have the game's small
+  default thresholds (10/20/30) keep the older rule of half (`MasteryScaler.Factor`). Each skill cast adds 1 xp
+  and tiers are cumulative thresholds on `SkillTreeData`, so the thresholds are replaced once per skill tree
+  before any of its data is read (this includes save loading).
 
-- **Flawless** - finish a combat floor without taking damage and the next combat floor clears itself.
-  After `AutoClearDelay` (1.5 s) input is locked, every hostile enemy is killed through the normal damage
-  path (so gold and xp are awarded; gold enemies first, because they pay nothing when they are the last one
-  standing) and the level victory is triggered once. An auto-cleared floor never earns the bonus, so at best
-  every other floor is skipped. Hits that are dodged or blocked by a shield do not count, and neither does
-  self-damage. Skipped: boss, store and special floors (the bonus carries over), endless mode, custom
-  floors, the tutorial and reloaded saved floors. Tunables in `Flawless.cs`: `AutoClearDelay`, `MaxFloor`.
-  Hooks: `PlayerStatus.ApplyDamage` (epilogue), `LevelManager.EndCurrentLevel` and `StartLevel`.
+- **Free floors** - winning an ordinary combat floor banks free floors that depend on how far that floor is
+  below your floor record (`FloorRecord`, saved by the game over screen): 5 or fewer = none, 6-15 = 1,
+  16-25 = 2, more than 25 = 3. Each banked free floor clears the next ordinary combat floor right after it is
+  built, before the movement tiles are shown: input is locked, every hostile enemy is killed through the
+  normal damage path (gold and xp are awarded; gold enemies first, because they pay nothing when they are the
+  last one standing) and the level victory is triggered. Cleared floors earn nothing. Within 5 floors of the
+  record banked floors are dropped and every floor is played. Stores, NPC floors, bosses, endless mode, custom
+  floors, the tutorial and reloaded saved floors neither earn nor spend; banked floors wait for the next
+  ordinary combat floor, and a new run starts with none. An Ekin killed by a clear dies like a normal enemy
+  and does not arm its explosion (`Enemy_Explosive.OnDeath` prologue).
+  Hooks: `LevelManager.EndCurrentLevel` (prologue), `LevelManager.StartLevel` (epilogue), `Enemy_Explosive.OnDeath`.
 
 - **Controllers** - the game reads pads through Unity's legacy joystick axes, numbered for Windows XInput.
   On Linux the same control lands on a different axis per driver: the right trigger shows up as the game's

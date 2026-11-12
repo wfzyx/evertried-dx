@@ -229,31 +229,47 @@ foreach (MethodDefinition method in tree.Methods.Where(m => m.HasBody && !m.IsSt
 }
 Console.WriteLine("Mastery hook: " + treeMethods + " SkillTreeData methods");
 
-// --- Flawless: damage / level end / level start.
-MethodDefinition applyDamage = Find("PlayerStatus", "ApplyDamage", 4);
-MethodReference onDamage = Hook("Flawless", "OnPlayerDamage");
-InsertBeforeEveryRet(applyDamage, () => new[]
-{
-    Instruction.Create(OpCodes.Dup),      // keep the bool result for the caller
-    Instruction.Create(OpCodes.Ldarg_1),  // amount
-    Instruction.Create(OpCodes.Ldarg_2),  // source
-    Instruction.Create(OpCodes.Call, onDamage),
-});
-
+// --- Free floors: level end / level start / Ekin death.
 MethodDefinition endLevel = Find("LevelManager", "EndCurrentLevel", 1);
 InsertPrologue(endLevel,
     Instruction.Create(OpCodes.Ldarg_0),
     Instruction.Create(OpCodes.Ldarg_1),
-    Instruction.Create(OpCodes.Call, Hook("Flawless", "OnBeforeLevelEnd")));
+    Instruction.Create(OpCodes.Call, Hook("FreeFloors", "OnBeforeLevelEnd")));
 
 MethodDefinition startLevel = Find("LevelManager", "StartLevel", 0);
-MethodReference afterStart = Hook("Flawless", "OnAfterLevelStart");
+MethodReference afterStart = Hook("FreeFloors", "OnAfterLevelStart");
 InsertBeforeEveryRet(startLevel, () => new[]
 {
     Instruction.Create(OpCodes.Ldarg_0),
     Instruction.Create(OpCodes.Call, afterStart),
 });
-Console.WriteLine("Flawless hooks installed");
+// An Ekin killed by a floor clear dies like a normal enemy: its explosion would otherwise stay armed after the floor ended.
+{
+    MethodDefinition explosiveDeath = Find("Enemy_Explosive", "OnDeath", 0);
+    MethodDefinition BaseMethod(string name)
+    {
+        MethodDefinition found = null;
+        for (TypeDefinition t = module.GetType("Enemy_Explosive").BaseType.Resolve(); t != null && found == null; t = t.BaseType?.Resolve())
+        {
+            found = t.Methods.FirstOrDefault(m => m.Name == name && m.Parameters.Count == 0);
+        }
+        return found ?? throw new InvalidOperationException("base " + name + " not found for Enemy_Explosive");
+    }
+    MethodDefinition baseDeath = BaseMethod("OnDeath");
+    MethodDefinition baseDeathLate = BaseMethod("OnDeathLate_Action"); // back to the pool, out of the turn handler
+    explosiveDeath.Body.SimplifyMacros();
+    ILProcessor il = explosiveDeath.Body.GetILProcessor();
+    Instruction first = explosiveDeath.Body.Instructions[0];
+    il.InsertBefore(first, Instruction.Create(OpCodes.Call, Hook("FreeFloors", "SkipExplosion")));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Brfalse, first));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ldarg_0));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Call, module.ImportReference(baseDeath)));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ldarg_0));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Call, module.ImportReference(baseDeathLate)));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ret));
+    explosiveDeath.Body.OptimizeMacros();
+}
+Console.WriteLine("Free floor hooks installed");
 
 
 // --- Controller input: answer the game's pad queries from evdev (see DxPad) instead of Unity's
@@ -466,7 +482,7 @@ MethodDefinition panelToggle = settingsPanel.Methods.Single(m => m.Name == "Togg
 InsertPrologue(panelToggle, Instruction.Create(OpCodes.Call, Hook("DxSettings", "Refresh")));
 Console.WriteLine("Switch inversion guard, one-shot Ascend and Disable Focus Timer hooks installed");
 
-foreach (MethodDefinition m in new[] { applyDamage, endLevel, startLevel, splashStart, getText, gameDataLoad, gameDataDefaults, timerMultiplier, panelStart, panelElements, panelToggle, mainMenuStart, pixelStart, splashDispose, markMethod, reassignSpot, clearCells, addSlot }.Concat(tree.Methods.Where(x => x.HasBody)))
+foreach (MethodDefinition m in new[] { endLevel, startLevel, splashStart, getText, gameDataLoad, gameDataDefaults, timerMultiplier, panelStart, panelElements, panelToggle, mainMenuStart, pixelStart, splashDispose, markMethod, reassignSpot, clearCells, addSlot }.Concat(tree.Methods.Where(x => x.HasBody)))
 {
     m.Body.OptimizeMacros();
 }
