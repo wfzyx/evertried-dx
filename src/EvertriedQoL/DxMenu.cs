@@ -11,6 +11,18 @@ namespace EvertriedQoL
             get { return sessionStarting; }
         }
 
+        /// <summary>True while the game is leaving a run for the main menu (pause or game-over panels, behind a fade).</summary>
+        public static bool InputLocked()
+        {
+            return sessionStarting;
+        }
+
+        /// <summary>PausePanel.ToMainMenu / GameplayCanvas.MainMenu prologue: lock panel input until the menu scene loads.</summary>
+        public static void BeginLeave()
+        {
+            sessionStarting = true;
+        }
+
         /// <summary>MainMenu.Start: a fresh menu, a fresh chance to start a run.</summary>
         public static void Reset()
         {
