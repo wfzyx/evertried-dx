@@ -192,8 +192,8 @@ namespace EvertriedQoL
 
         // Hazards, traps and the player's own constructions do not count towards ending a floor, but they stay in
         // the scene and ride along (or hang in the air) while the next floor is raised. They are destroyed through
-        // their normal death path, so their destruction animation plays like the enemies'. The source is null on
-        // purpose: a hazard-sourced kill would count as a player attack and add Focus.
+        // their normal death path, so their destruction animation plays like the enemies'. The player is the source,
+        // like for the enemies, so the kills can give Focus and shards as usual.
         private static void RemoveConstructions(TurnHandler turns)
         {
             EnemyBase[] all = Object.FindObjectsOfType<EnemyBase>();
@@ -208,7 +208,7 @@ namespace EvertriedQoL
                 }
                 if (construction.HealthPoints > 0)
                 {
-                    construction.ApplyDamage(construction.HealthPoints, null, Vector2Int.zero, true);
+                    construction.ApplyDamage(construction.HealthPoints, PlayerCharacter.Instance, Vector2Int.zero, true);
                 }
                 if (!construction.Active || construction.HealthPoints <= 0)
                 {

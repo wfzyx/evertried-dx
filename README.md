@@ -28,7 +28,7 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
   floors, the tutorial and reloaded saved floors neither earn nor spend; banked floors wait for the next
   ordinary combat floor, and a new run starts with none. An Ekin killed by a clear dies like a normal enemy
   and does not arm its explosion (`Enemy_Explosive.OnDeath` prologue). Hazards and constructions left on the
-  floor are destroyed through their own death path (animation included), without adding Focus.
+  floor are destroyed through their own death path (animation included); like the enemies, they can give Focus.
   Hooks: `LevelManager.EndCurrentLevel` (prologue), `LevelManager.StartLevel` (epilogue), `Enemy_Explosive.OnDeath`.
 
 - **Controllers** - the game reads pads through Unity's legacy joystick axes, numbered for Windows XInput.
