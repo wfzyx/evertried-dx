@@ -12,7 +12,9 @@ namespace EvertriedQoL
     ///   5 or fewer                0 (and banked credits stop being spent)
     ///   6 to 15                   1
     ///   16 to 25                  2
-    ///   more than 25              3
+    ///   26 to 35                  3
+    ///   36 to 45                  4
+    ///   more than 45              5
     ///
     /// Only floors the player wins earn credits; a cleared floor earns nothing. Stores, NPC (special) floors,
     /// bosses, the tutorial and reloaded saved floors neither earn nor spend credits: banked credits wait for
@@ -35,11 +37,9 @@ namespace EvertriedQoL
             {
                 return 0;
             }
-            if (floorsBelowRecord <= 15)
-            {
-                return 1;
-            }
-            return floorsBelowRecord <= 25 ? 2 : 3;
+            // 6-15 = 1, 16-25 = 2, 26-35 = 3, 36-45 = 4, more than 45 = 5: one more per ten floors.
+            int count = (floorsBelowRecord - NearRecord + 9) / 10;
+            return count > 5 ? 5 : count;
         }
 
         // The record is the highest floor index reached, saved by the game-over panel as "FloorRecord".
@@ -182,8 +182,6 @@ namespace EvertriedQoL
             }
 
             RemoveConstructions(turns);
-
-
             int left = turns.HostileCharacters.Length;
             if (left > 0)
             {
@@ -193,11 +191,14 @@ namespace EvertriedQoL
         }
 
         // Hazards, traps and the player's own constructions do not count towards ending a floor, but they stay in
-        // the scene and ride along (or hang in the air) while the next floor is raised, so a cleared floor removes them.
+        // the scene and ride along (or hang in the air) while the next floor is raised. They are destroyed through
+        // their normal death path, so their destruction animation plays like the enemies'. The source is null on
+        // purpose: a hazard-sourced kill would count as a player attack and add Focus.
         private static void RemoveConstructions(TurnHandler turns)
         {
             EnemyBase[] all = Object.FindObjectsOfType<EnemyBase>();
-            int removed = 0;
+            int destroyed = 0;
+            int forced = 0;
             for (int i = 0; i < all.Length; i++)
             {
                 EnemyBase construction = all[i];
@@ -205,17 +206,26 @@ namespace EvertriedQoL
                 {
                     continue;
                 }
-                construction.SetActive(false); // stops it acting and silences looping sounds
+                if (construction.HealthPoints > 0)
+                {
+                    construction.ApplyDamage(construction.HealthPoints, null, Vector2Int.zero, true);
+                }
+                if (!construction.Active || construction.HealthPoints <= 0)
+                {
+                    destroyed++;
+                    continue;
+                }
+                // Some constructions ignore damage that is not aimed: remove those without an animation.
+                construction.SetActive(false);
                 turns.RemoveEnemy(construction);
                 ReferenceSingleton<PoolHandler>.Instance.StoreObject(construction.gameObject);
-                removed++;
+                forced++;
             }
-            if (removed > 0)
+            if (destroyed + forced > 0)
             {
-                Debug.Log("[EvertriedQoL] Removed " + removed + " construction(s) with the cleared floor");
+                Debug.Log("[EvertriedQoL] Cleared floor constructions: " + destroyed + " destroyed, " + forced + " removed");
             }
         }
-
 
         /// <summary>Enemy_Explosive.OnDeath prologue: true = die like a normal enemy, without arming the explosion.</summary>
         public static bool SkipExplosion()

@@ -20,14 +20,15 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
 
 - **Free floors** - winning an ordinary combat floor banks free floors that depend on how far that floor is
   below your floor record (`FloorRecord`, saved by the game over screen): 5 or fewer = none, 6-15 = 1,
-  16-25 = 2, more than 25 = 3. Each banked free floor clears the next ordinary combat floor right after it is
+  16-25 = 2, 26-35 = 3, 36-45 = 4, more than 45 = 5. Each banked free floor clears the next ordinary combat floor right after it is
   built, before the movement tiles are shown: input is locked, every hostile enemy is killed through the
   normal damage path (gold and xp are awarded; gold enemies first, because they pay nothing when they are the
   last one standing) and the level victory is triggered. Cleared floors earn nothing. Within 5 floors of the
   record banked floors are dropped and every floor is played. Stores, NPC floors, bosses, endless mode, custom
   floors, the tutorial and reloaded saved floors neither earn nor spend; banked floors wait for the next
   ordinary combat floor, and a new run starts with none. An Ekin killed by a clear dies like a normal enemy
-  and does not arm its explosion (`Enemy_Explosive.OnDeath` prologue).
+  and does not arm its explosion (`Enemy_Explosive.OnDeath` prologue). Hazards and constructions left on the
+  floor are destroyed through their own death path (animation included), without adding Focus.
   Hooks: `LevelManager.EndCurrentLevel` (prologue), `LevelManager.StartLevel` (epilogue), `Enemy_Explosive.OnDeath`.
 
 - **Controllers** - the game reads pads through Unity's legacy joystick axes, numbered for Windows XInput.
