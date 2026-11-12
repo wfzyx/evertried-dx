@@ -441,6 +441,29 @@ InsertPrologue(gameDataDefaults, Instruction.Create(OpCodes.Call, Hook("DxFocus"
 MethodDefinition timerMultiplier = module.GetType("FocusMeter").Methods.Single(m => m.Name == "get_TimerMultiplier");
 InsertBeforeEveryRet(timerMultiplier, () => new[] { Instruction.Create(OpCodes.Call, Hook("DxFocus", "Multiplier")) });
 
+// --- Loadout screen: the mastery progress bar is hidden for Dash and Meditate. Dash has no mastery, but Meditate
+// does (Trance), so only Dash keeps the bar hidden. The game's test is "type == Dash || type == Meditate".
+{
+    MethodDefinition updateRefs = module.GetType("LoadoutSkillIcon").Methods.Single(m => m.Name == "UpdateReferences" && m.Parameters.Count == 1);
+    updateRefs.Body.SimplifyMacros();
+    List<Instruction> body = updateRefs.Body.Instructions.ToList();
+    int hits = 0;
+    for (int i = 0; i + 1 < body.Count; i++)
+    {
+        if (body[i].OpCode == OpCodes.Ldc_I4 && (int)body[i].Operand == 1 && body[i + 1].OpCode == OpCodes.Bne_Un)
+        {
+            body[i].Operand = -1; // SkillType.Meditate is 1; no skill has type -1
+            hits++;
+        }
+    }
+    if (hits != 1)
+    {
+        throw new InvalidOperationException("LoadoutSkillIcon Meditate test not found exactly once: " + hits);
+    }
+    updateRefs.Body.OptimizeMacros();
+}
+
+
 // --- Restarting after dying with Light Feet active: RemoveBuff(LightFeet) calls RemoveLightFeetEffect, which
 // dereferences an emitter that death already removed. The exception aborts the level setup and the restart
 // hangs on the loading screen. Do nothing when there is no emitter.
