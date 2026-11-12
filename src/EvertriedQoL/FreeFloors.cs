@@ -172,7 +172,14 @@ namespace EvertriedQoL
                         {
                             continue;
                         }
-                        enemy.ApplyDamage(enemy.HealthPoints, player, Vector2Int.zero, true);
+                        try
+                        {
+                            enemy.ApplyDamage(enemy.HealthPoints, player, Vector2Int.zero, true);
+                        }
+                        catch (System.Exception e)
+                        {
+                            Debug.Log("[EvertriedQoL] Could not kill " + enemy.name + ": " + e.Message);
+                        }
                     }
                 }
             }
@@ -181,7 +188,15 @@ namespace EvertriedQoL
                 SuppressExplosions = false;
             }
 
-            RemoveConstructions(turns);
+            try
+            {
+                RemoveConstructions(turns);
+            }
+            catch (System.Exception e)
+            {
+                // Whatever goes wrong here, the floor must still end: input is locked until the victory.
+                Debug.Log("[EvertriedQoL] Construction cleanup failed: " + e.Message);
+            }
             int left = turns.HostileCharacters.Length;
             if (left > 0)
             {
@@ -206,16 +221,26 @@ namespace EvertriedQoL
                 {
                     continue;
                 }
+                bool failed = false;
                 if (construction.HealthPoints > 0)
                 {
-                    construction.ApplyDamage(construction.HealthPoints, PlayerCharacter.Instance, Vector2Int.zero, true);
+                    try
+                    {
+                        construction.ApplyDamage(construction.HealthPoints, PlayerCharacter.Instance, Vector2Int.zero, true);
+                    }
+                    catch (System.Exception e)
+                    {
+                        // Some constructions have no animator or death feedback; never let that stop the floor.
+                        Debug.Log("[EvertriedQoL] Could not destroy " + construction.name + ": " + e.Message);
+                        failed = true;
+                    }
                 }
-                if (!construction.Active || construction.HealthPoints <= 0)
+                if (!failed && (!construction.Active || construction.HealthPoints <= 0))
                 {
                     destroyed++;
                     continue;
                 }
-                // Some constructions ignore damage that is not aimed: remove those without an animation.
+                // Constructions that ignore damage that is not aimed, or that failed above: remove them without an animation.
                 construction.SetActive(false);
                 turns.RemoveEnemy(construction);
                 ReferenceSingleton<PoolHandler>.Instance.StoreObject(construction.gameObject);
