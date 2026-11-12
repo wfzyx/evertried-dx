@@ -441,6 +441,23 @@ InsertPrologue(gameDataDefaults, Instruction.Create(OpCodes.Call, Hook("DxFocus"
 MethodDefinition timerMultiplier = module.GetType("FocusMeter").Methods.Single(m => m.Name == "get_TimerMultiplier");
 InsertBeforeEveryRet(timerMultiplier, () => new[] { Instruction.Create(OpCodes.Call, Hook("DxFocus", "Multiplier")) });
 
+// --- Restarting after dying with Light Feet active: RemoveBuff(LightFeet) calls RemoveLightFeetEffect, which
+// dereferences an emitter that death already removed. The exception aborts the level setup and the restart
+// hangs on the loading screen. Do nothing when there is no emitter.
+{
+    TypeDefinition effectsType = module.GetType("PlayerEffects");
+    MethodDefinition removeLightFeet = effectsType.Methods.Single(m => m.Name == "RemoveLightFeetEffect" && m.Parameters.Count == 0);
+    FieldDefinition emitter = effectsType.Fields.Single(f => f.Name == "lightFeetEmitter");
+    removeLightFeet.Body.SimplifyMacros();
+    ILProcessor il = removeLightFeet.Body.GetILProcessor();
+    Instruction first = removeLightFeet.Body.Instructions[0];
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ldarg_0));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ldfld, emitter));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Brtrue, first));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ret));
+    removeLightFeet.Body.OptimizeMacros();
+}
+
 // --- Trance (Meditate mastery tier 2): the game tests "MeditateTurns >= 0", which is always true, so the
 // focus protection applied whenever Meditate was merely selected. It is meant to apply while meditating.
 MethodDefinition meditateTrance = module.GetType("PlayerCombat").Methods.Single(m => m.Name == "get_MeditateTrance");

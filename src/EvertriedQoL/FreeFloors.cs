@@ -181,6 +181,9 @@ namespace EvertriedQoL
                 SuppressExplosions = false;
             }
 
+            RemoveConstructions(turns);
+
+
             int left = turns.HostileCharacters.Length;
             if (left > 0)
             {
@@ -188,6 +191,31 @@ namespace EvertriedQoL
             }
             level.TriggerLevelVictory();
         }
+
+        // Hazards, traps and the player's own constructions do not count towards ending a floor, but they stay in
+        // the scene and ride along (or hang in the air) while the next floor is raised, so a cleared floor removes them.
+        private static void RemoveConstructions(TurnHandler turns)
+        {
+            EnemyBase[] all = Object.FindObjectsOfType<EnemyBase>();
+            int removed = 0;
+            for (int i = 0; i < all.Length; i++)
+            {
+                EnemyBase construction = all[i];
+                if (construction == null || construction.IsHostile || !construction.gameObject.activeInHierarchy)
+                {
+                    continue;
+                }
+                construction.SetActive(false); // stops it acting and silences looping sounds
+                turns.RemoveEnemy(construction);
+                ReferenceSingleton<PoolHandler>.Instance.StoreObject(construction.gameObject);
+                removed++;
+            }
+            if (removed > 0)
+            {
+                Debug.Log("[EvertriedQoL] Removed " + removed + " construction(s) with the cleared floor");
+            }
+        }
+
 
         /// <summary>Enemy_Explosive.OnDeath prologue: true = die like a normal enemy, without arming the explosion.</summary>
         public static bool SkipExplosion()
