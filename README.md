@@ -53,6 +53,8 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
   animation plays cannot restart it or replay its sound.
 - **Ascend input lock** - while the Ascend animation plays after a run is chosen, the main menu ignores input
   (`DxMenu.SessionStarting` feeds the `MainMenu.ActiveUpdate` guard).
+- **Trance only while meditating** - the game tests `MeditateTurns >= 0` (always true), so Meditate's top mastery
+  stopped every Focus loss whenever the skill was merely selected. It is now `> 0`: protected only during the meditation turns.
 - **Run start/leave input lock** - while a run starts (Ascend animation, including the mastery picker) or is left
   (pause menu or game over to the main menu), every panel ignores input (`PanelControllable.Update` guard).
   Cleared when the next scene starts.

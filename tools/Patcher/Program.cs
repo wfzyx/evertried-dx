@@ -425,6 +425,29 @@ InsertPrologue(gameDataDefaults, Instruction.Create(OpCodes.Call, Hook("DxFocus"
 MethodDefinition timerMultiplier = module.GetType("FocusMeter").Methods.Single(m => m.Name == "get_TimerMultiplier");
 InsertBeforeEveryRet(timerMultiplier, () => new[] { Instruction.Create(OpCodes.Call, Hook("DxFocus", "Multiplier")) });
 
+// --- Trance (Meditate mastery tier 2): the game tests "MeditateTurns >= 0", which is always true, so the
+// focus protection applied whenever Meditate was merely selected. It is meant to apply while meditating.
+MethodDefinition meditateTrance = module.GetType("PlayerCombat").Methods.Single(m => m.Name == "get_MeditateTrance");
+{
+    meditateTrance.Body.SimplifyMacros();
+    List<Instruction> ins = meditateTrance.Body.Instructions.ToList();
+    int fixedCount = 0;
+    for (int i = 0; i + 2 < ins.Count; i++)
+    {
+        if (ins[i].OpCode == OpCodes.Callvirt && ins[i].Operand is MethodReference mr && mr.Name == "get_MeditateTurns"
+            && ins[i + 1].OpCode == OpCodes.Ldc_I4 && (int)ins[i + 1].Operand == 0 && ins[i + 2].OpCode == OpCodes.Blt)
+        {
+            ins[i + 2].OpCode = OpCodes.Ble; // jump to "false" when turns <= 0
+            fixedCount++;
+        }
+    }
+    if (fixedCount != 1)
+    {
+        throw new InvalidOperationException("MeditateTrance pattern not found exactly once: " + fixedCount);
+    }
+    meditateTrance.Body.OptimizeMacros();
+}
+
 TypeDefinition settingsPanel = module.GetType("SettingsPanel");
 FieldDefinition Field(string name) => settingsPanel.Fields.Single(f => f.Name == name);
 MethodDefinition panelStart = settingsPanel.Methods.Single(m => m.Name == "Start" && m.Parameters.Count == 0);
