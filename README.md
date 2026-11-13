@@ -90,6 +90,12 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
   point-filtered upscale + stretch) never goes black and is crisper, so `DxPixel` switches to it when the
   pixel camera starts.
 
+- **Steam achievements** - the Linux depot has no Steamworks, so unlocks never reached the Steam account.
+  `DxSteam` loads a `libsteam_api.so` (a copy in `Evertried_Release_Data/Plugins`, else the one inside Proton or
+  another installed game), connects to the Steam client that launched the game, and mirrors the game's saved
+  unlock list (`AcheivementsUnlocked`) to Steam: past unlocks on the first run, new ones as they happen. The
+  game's keys are Steam's API names. It does nothing, and logs why, when the game was not started from Steam.
+
 ## Linux build fix
 The native Linux build does not start properly on current distros (glibc >= 2.41, e.g. Fedora 43+,
 SteamOS 3.7+): FMOD's libraries are flagged as needing an executable stack, glibc refuses to load

@@ -32,6 +32,7 @@ namespace EvertriedQoL
 
         private void Update()
         {
+            DxSteam.Tick();
             if (Time.unscaledTime < next)
             {
                 return;
