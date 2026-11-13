@@ -45,7 +45,7 @@ namespace EvertriedQoL
         // The record is the highest floor index reached, saved by the game-over panel as "FloorRecord".
         private static int Record
         {
-            get { return SaveHandler.GetInt("FloorRecord"); }
+            get { return SaveHandler.GetInt(DxRecord.Key()); }
         }
 
         // LevelManager.EndCurrentLevel(bool isVictory) prologue.

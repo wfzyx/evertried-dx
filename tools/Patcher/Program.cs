@@ -463,6 +463,26 @@ InsertBeforeEveryRet(timerMultiplier, () => new[] { Instruction.Create(OpCodes.C
     updateRefs.Body.OptimizeMacros();
 }
 
+// --- Hard mode keeps its own floor record: the game over panel's "FloorRecord" key becomes DxRecord.Key().
+{
+    int swapped = 0;
+    foreach (MethodDefinition method in module.GetType("GameOverPanel").Methods.Where(m => m.HasBody))
+    {
+        foreach (Instruction ins in method.Body.Instructions)
+        {
+            if (ins.OpCode == OpCodes.Ldstr && (string)ins.Operand == "FloorRecord")
+            {
+                ins.OpCode = OpCodes.Call;
+                ins.Operand = Hook("DxRecord", "Key");
+                swapped++;
+            }
+        }
+    }
+    if (swapped != 2)
+    {
+        throw new InvalidOperationException("FloorRecord key reads/writes found: " + swapped + " (expected 2)");
+    }
+}
 
 // --- Restarting after dying with Light Feet active: RemoveBuff(LightFeet) calls RemoveLightFeetEffect, which
 // dereferences an emitter that death already removed. The exception aborts the level setup and the restart
