@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
@@ -16,54 +17,18 @@ namespace EvertriedQoL
     /// </summary>
     internal static class DxSteam
     {
-        private const string SteamLib = "libsteam_api.so";
         private const string Libc = "libc.so.6";
+        private const string SteamLib = "libsteam_api.so";
         private const string UnlockedKey = "AcheivementsUnlocked";
+        private const int RtldNowGlobal = 0x2 | 0x100;
 
         [DllImport(Libc)]
         private static extern IntPtr dlopen(string file, int mode);
 
-        [DllImport(SteamLib)]
-        private static extern byte SteamAPI_Init();
-
-        [DllImport(SteamLib)]
-        private static extern IntPtr SteamClient();
-
-        [DllImport(SteamLib)]
-        private static extern int SteamAPI_GetHSteamUser();
-
-        [DllImport(SteamLib)]
-        private static extern int SteamAPI_GetHSteamPipe();
-
-        [DllImport(SteamLib)]
-        private static extern void SteamAPI_RunCallbacks();
-
-        [DllImport(SteamLib)]
-        private static extern IntPtr SteamAPI_ISteamClient_GetISteamUserStats(IntPtr client, int user, int pipe, string version);
-
-        [DllImport(SteamLib)]
-        private static extern byte SteamAPI_ISteamUserStats_RequestCurrentStats(IntPtr stats);
-
-        [DllImport(SteamLib)]
-        private static extern uint SteamAPI_ISteamUserStats_GetNumAchievements(IntPtr stats);
-
-        [DllImport(SteamLib)]
-        private static extern byte SteamAPI_ISteamUserStats_GetAchievement(IntPtr stats, string name, out byte achieved);
-
-        [DllImport(SteamLib)]
-        private static extern byte SteamAPI_ISteamUserStats_SetAchievement(IntPtr stats, string name);
-
-        [DllImport(SteamLib)]
-        private static extern byte SteamAPI_ISteamUserStats_StoreStats(IntPtr stats);
-
-        private const int RtldNowGlobal = 0x2 | 0x100;
-        private const float FirstTry = 3f;
-
         private enum State { Waiting, Connecting, Ready, Off }
 
         private static State state = State.Waiting;
-        private static IntPtr stats = IntPtr.Zero;
-        private static float next = FirstTry;
+        private static float next = 3f;
         private static float giveUpAt;
         private static string lastSeen;
         private static readonly HashSet<string> handled = new HashSet<string>();
@@ -84,21 +49,21 @@ namespace EvertriedQoL
                         Connect();
                         break;
                     case State.Connecting:
-                        SteamAPI_RunCallbacks();
-                        if (SteamAPI_ISteamUserStats_GetNumAchievements(stats) > 0)
+                        DxSteamApi.Callbacks();
+                        if (DxSteamApi.Count() > 0)
                         {
                             state = State.Ready;
-                            Debug.Log("[EvertriedQoL] Steam stats ready (" + SteamAPI_ISteamUserStats_GetNumAchievements(stats) + " achievements)");
+                            Debug.Log("[EvertriedQoL] Steam stats ready (" + DxSteamApi.Count() + " achievements)");
                             Sync();
                         }
                         else if (Time.unscaledTime > giveUpAt)
                         {
                             Debug.Log("[EvertriedQoL] Steam never delivered the stats; achievements will not be reported");
-                            Shutdown();
+                            state = State.Off;
                         }
                         break;
                     case State.Ready:
-                        SteamAPI_RunCallbacks();
+                        DxSteamApi.Callbacks();
                         Sync();
                         break;
                 }
@@ -110,6 +75,9 @@ namespace EvertriedQoL
             }
         }
 
+        // Nothing here may touch DxSteamApi until the library is loaded: Mono resolves the imports of a
+        // method when it compiles the method, and a missing library is an error at that point.
+        [MethodImpl(MethodImplOptions.NoInlining)]
         private static void Connect()
         {
             if (!LoadLibrary())
@@ -118,30 +86,28 @@ namespace EvertriedQoL
                 state = State.Off;
                 return;
             }
-            if (SteamAPI_Init() == 0)
+            if (!Open())
             {
-                Debug.Log("[EvertriedQoL] SteamAPI_Init failed (is Steam running and was the game started from it?); achievements will not be reported");
                 state = State.Off;
                 return;
             }
-            IntPtr client = SteamClient();
-            stats = SteamAPI_ISteamClient_GetISteamUserStats(client, SteamAPI_GetHSteamUser(), SteamAPI_GetHSteamPipe(), "STEAMUSERSTATS_INTERFACE_VERSION012");
-            if (client == IntPtr.Zero || stats == IntPtr.Zero)
-            {
-                Debug.Log("[EvertriedQoL] Steam user stats interface unavailable; achievements will not be reported");
-                state = State.Off;
-                return;
-            }
-            SteamAPI_ISteamUserStats_RequestCurrentStats(stats);
             giveUpAt = Time.unscaledTime + 30f;
             state = State.Connecting;
         }
 
-        private static void Shutdown()
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static bool Open()
         {
-            state = State.Off;
+            string problem = DxSteamApi.Open();
+            if (problem != null)
+            {
+                Debug.Log("[EvertriedQoL] " + problem + "; achievements will not be reported");
+                return false;
+            }
+            return true;
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         private static void Sync()
         {
             string raw = PlayerPrefs.GetString(UnlockedKey, "");
@@ -159,29 +125,24 @@ namespace EvertriedQoL
                 {
                     continue;
                 }
-                byte achieved;
-                if (SteamAPI_ISteamUserStats_GetAchievement(stats, key, out achieved) == 0)
+                int result = DxSteamApi.Report(key);
+                if (result == 0)
                 {
                     Debug.Log("[EvertriedQoL] Steam has no achievement named '" + key + "'");
-                    continue;
                 }
-                if (achieved != 0)
-                {
-                    continue;
-                }
-                if (SteamAPI_ISteamUserStats_SetAchievement(stats, key) != 0)
+                else if (result == 2)
                 {
                     Debug.Log("[EvertriedQoL] Steam achievement unlocked: " + key);
                     changed = true;
                 }
-                else
+                else if (result == 3)
                 {
                     Debug.Log("[EvertriedQoL] Steam refused achievement '" + key + "'");
                 }
             }
             if (changed)
             {
-                SteamAPI_ISteamUserStats_StoreStats(stats);
+                DxSteamApi.Store();
             }
         }
 
@@ -226,6 +187,99 @@ namespace EvertriedQoL
         {
             int cut = path == null ? -1 : path.LastIndexOf('/');
             return cut > 0 ? path.Substring(0, cut) : null;
+        }
+    }
+
+    /// <summary>The Steamworks calls. Every method is kept out of line so its imports resolve only when called.</summary>
+    internal static class DxSteamApi
+    {
+        private const string SteamLib = "libsteam_api.so";
+
+        [DllImport(SteamLib)]
+        private static extern byte SteamAPI_Init();
+
+        [DllImport(SteamLib)]
+        private static extern IntPtr SteamClient();
+
+        [DllImport(SteamLib)]
+        private static extern int SteamAPI_GetHSteamUser();
+
+        [DllImport(SteamLib)]
+        private static extern int SteamAPI_GetHSteamPipe();
+
+        [DllImport(SteamLib)]
+        private static extern void SteamAPI_RunCallbacks();
+
+        [DllImport(SteamLib)]
+        private static extern IntPtr SteamAPI_ISteamClient_GetISteamUserStats(IntPtr client, int user, int pipe, string version);
+
+        [DllImport(SteamLib)]
+        private static extern byte SteamAPI_ISteamUserStats_RequestCurrentStats(IntPtr stats);
+
+        [DllImport(SteamLib)]
+        private static extern uint SteamAPI_ISteamUserStats_GetNumAchievements(IntPtr stats);
+
+        [DllImport(SteamLib)]
+        private static extern byte SteamAPI_ISteamUserStats_GetAchievement(IntPtr stats, string name, out byte achieved);
+
+        [DllImport(SteamLib)]
+        private static extern byte SteamAPI_ISteamUserStats_SetAchievement(IntPtr stats, string name);
+
+        [DllImport(SteamLib)]
+        private static extern byte SteamAPI_ISteamUserStats_StoreStats(IntPtr stats);
+
+        private static IntPtr stats = IntPtr.Zero;
+
+        /// <summary>Starts the API; returns null on success, otherwise what went wrong.</summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal static string Open()
+        {
+            if (SteamAPI_Init() == 0)
+            {
+                return "SteamAPI_Init failed (is Steam running and was the game started from it?)";
+            }
+            IntPtr client = SteamClient();
+            stats = SteamAPI_ISteamClient_GetISteamUserStats(client, SteamAPI_GetHSteamUser(), SteamAPI_GetHSteamPipe(), "STEAMUSERSTATS_INTERFACE_VERSION012");
+            if (client == IntPtr.Zero || stats == IntPtr.Zero)
+            {
+                return "Steam user stats interface unavailable";
+            }
+            SteamAPI_ISteamUserStats_RequestCurrentStats(stats);
+            return null;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal static void Callbacks()
+        {
+            SteamAPI_RunCallbacks();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal static uint Count()
+        {
+            return SteamAPI_ISteamUserStats_GetNumAchievements(stats);
+        }
+
+        /// <summary>0 = unknown to Steam, 1 = already unlocked there, 2 = unlocked now, 3 = refused.</summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal static int Report(string key)
+        {
+            byte achieved;
+            if (SteamAPI_ISteamUserStats_GetAchievement(stats, key, out achieved) == 0)
+            {
+                return 0;
+            }
+            if (achieved != 0)
+            {
+                return 1;
+            }
+            return SteamAPI_ISteamUserStats_SetAchievement(stats, key) != 0 ? 2 : 3;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal static void Store()
+        {
+            SteamAPI_ISteamUserStats_StoreStats(stats);
         }
     }
 }
