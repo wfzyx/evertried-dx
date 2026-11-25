@@ -290,6 +290,14 @@ foreach (string typeName in new[] { "PlayerCharacter", "PlayerCharacterDemo" })
 }
 Console.WriteLine("Halloween skin hooks: " + collectionMethods + " PlayerSkinsCollection methods, SetSkin, SetActiveScarf, 2 LateUpdate");
 
+// --- Turn log: the game's turn-state messages go to a hidden debug console only; copy them into Player.log.
+MethodDefinition consoleLog = module.GetType("DebugConsoleUI").Methods
+    .Single(m => m.Name == "Log" && m.Parameters.Count == 2 && m.Parameters[1].ParameterType.Name == "MessageLogType");
+InsertPrologue(consoleLog,
+    Instruction.Create(OpCodes.Ldarg_0),
+    Instruction.Create(OpCodes.Ldarg_1),
+    Instruction.Create(OpCodes.Call, Hook("DxTurnLog", "Forward")));
+
 // --- Free floors: level end / level start / Ekin death.
 MethodDefinition endLevel = Find("LevelManager", "EndCurrentLevel", 1);
 InsertPrologue(endLevel,
