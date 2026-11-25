@@ -12,11 +12,11 @@ namespace EvertriedQoL
     /// </summary>
     public static class MasteryScaler
     {
-        /// <summary>Multiplier for trees that keep the old rule (the ones whose game thresholds are small defaults).</summary>
-        public const float Factor = 0.5f;
+        /// <summary>Multiplier for trees whose game thresholds are small defaults (10/20/30 become 3/5/8).</summary>
+        public const float Factor = 0.25f;
 
-        /// <summary>Casts per mastery tier for skills with real mastery data: tiers unlock at 80, 160 and 240 casts.</summary>
-        public const int CastsPerTier = 80;
+        /// <summary>Casts per mastery tier for skills with real mastery data: tiers unlock at 40, 80 and 120 casts.</summary>
+        public const int CastsPerTier = 40;
 
         /// <summary>The game's own tables use 120/240/720; anything at or above this is such a table.</summary>
         private const float TableThreshold = 100f;
@@ -69,6 +69,31 @@ namespace EvertriedQoL
             }
             tree.SetMasteryTiers(tiers);
             Debug.Log("[EvertriedQoL] Scaled mastery tiers for " + tree.name);
+        }
+
+        /// <summary>
+        /// Called at the start of <c>SkillTreeData.SetXpAmount</c> (loading a save, each cast, the Alchemist):
+        /// the xp a save already has is kept, but never above the top tier's threshold, so lowering the
+        /// thresholds leaves fully mastered skills exactly at max instead of past it.
+        /// </summary>
+        public static int ClampXp(SkillTreeData tree, int value)
+        {
+            if (tree == null)
+            {
+                return value;
+            }
+            EnsureScaled(tree);
+            SkillTreeData.MasteryTier[] tiers = tree.MasteryTiers;
+            if (tiers == null || tiers.Length == 0)
+            {
+                return value;
+            }
+            int max = (int)tiers[tiers.Length - 1].xpRequirement;
+            if (max > 0 && value > max)
+            {
+                return max;
+            }
+            return value;
         }
     }
 }

@@ -12,11 +12,12 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
 `Assembly-CSharp.dll` it saved to the backup folder, so reinstalling is safe.
 
 ## Features
-- **Mastery** - skills with real mastery data (the game's 120/240/720 table) unlock their tiers at 80, 160 and
-  240 casts (`MasteryScaler.CastsPerTier`, 80 casts per tier). The few trees that only have the game's small
-  default thresholds (10/20/30) keep the older rule of half (`MasteryScaler.Factor`). Each skill cast adds 1 xp
+- **Mastery** - skills with real mastery data (the game's 120/240/720 table) unlock their tiers at 40, 80 and
+  120 casts (`MasteryScaler.CastsPerTier`, 40 casts per tier). The few trees that only have the game's small
+  default thresholds (10/20/30) use a quarter of them, 3/5/8 (`MasteryScaler.Factor`). Each skill cast adds 1 xp
   and tiers are cumulative thresholds on `SkillTreeData`, so the thresholds are replaced once per skill tree
-  before any of its data is read (this includes save loading).
+  before any of its data is read (this includes save loading). Saved xp is kept as is, but `SetXpAmount` clamps
+  it to the top tier's threshold (`MasteryScaler.ClampXp`), so a skill past the new max sits exactly at max.
 
 - **Free floors** - winning an ordinary combat floor banks free floors that depend on how far that floor is
   below your floor record (`FloorRecord`, saved by the game over screen): 5 or fewer = none, 6-15 = 1,

@@ -228,6 +228,18 @@ foreach (MethodDefinition method in tree.Methods.Where(m => m.HasBody && !m.IsSt
     treeMethods++;
 }
 Console.WriteLine("Mastery hook: " + treeMethods + " SkillTreeData methods");
+// Saved xp is kept as is but clamped to the top tier: `value = MasteryScaler.ClampXp(this, value)`.
+MethodDefinition setXp = Find("SkillTreeData", "SetXpAmount", 1);
+{
+    setXp.Body.SimplifyMacros();
+    ILProcessor il = setXp.Body.GetILProcessor();
+    Instruction first = setXp.Body.Instructions[0];
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ldarg_0));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ldarg, setXp.Parameters[0]));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Call, Hook("MasteryScaler", "ClampXp")));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Starg, setXp.Parameters[0]));
+    setXp.Body.OptimizeMacros();
+}
 
 // --- Free floors: level end / level start / Ekin death.
 MethodDefinition endLevel = Find("LevelManager", "EndCurrentLevel", 1);
