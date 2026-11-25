@@ -19,6 +19,19 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
   before any of its data is read (this includes save loading). Saved xp is kept as is, but `SetXpAmount` clamps
   it to the top tier's threshold (`MasteryScaler.ClampXp`), so a skill past the new max sits exactly at max.
 
+- **Halloween skin** - the Linux depot predates the Halloween update, so "Enter Code" with `trickortreat` did
+  nothing. `DxSkin` ports the skin (Jack-o'-Warrior) from the Windows build: `tools/extract_skin.py` reads its
+  sprite sheet, 141 sprite rects, scarf colours and One With All gradient from *your* Windows install into
+  `Managed/halloween.dxskin` (game art, never committed; `WINDATA=<Windows Evertried_Data>`, which
+  `tools/deploy-remote.sh` defaults to this machine's Steam copy when it is the Windows build). The Windows
+  skin's animations are frame-for-frame copies of the Killer skin's, so the ported skin plays Killer's
+  animations and a `LateUpdate` added to `PlayerCharacter` and `PlayerCharacterDemo` swaps each
+  `Player_Killer_N` sprite for `Player_Halloween_N`. Its scarf is the default scarf with an orange gradient
+  (`PlayerEffects.SetActiveScarf` argument rewrite). The stripped CoreModule has no `Sprite.Create`, so
+  `SpriteIcall.cs` binds the engine's `UnityEngine.Sprite::CreateSprite_Injected` internal call directly.
+  The skin is appended to `PlayerSkinsCollection` as index 5, as on Windows. Uninstalling resets a save that
+  is wearing it back to the default skin, since the unmodded game has only 5.
+
 - **Free floors** - winning an ordinary combat floor banks free floors that depend on how far that floor is
   below your floor record (`FloorRecord`, saved by the game over screen): 5 or fewer = none, 6-15 = 1,
   16-25 = 2, 26-35 = 3, 36-45 = 4, more than 45 = 5. Each banked free floor clears the next ordinary combat floor right after it is

@@ -241,6 +241,55 @@ MethodDefinition setXp = Find("SkillTreeData", "SetXpAmount", 1);
     setXp.Body.OptimizeMacros();
 }
 
+// --- Halloween skin (DxSkin): append it to the collection, track the avatars wearing it, recolour the scarf,
+// and swap Killer frames for Halloween frames after the animator runs (a LateUpdate added to both classes).
+MethodReference ensureSkin = Hook("DxSkin", "EnsureSkin");
+int collectionMethods = 0;
+foreach (MethodDefinition method in module.GetType("PlayerSkinsCollection").Methods
+    .Where(m => m.HasBody && !m.IsStatic && !m.IsConstructor).ToList())
+{
+    InsertPrologue(method, Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Call, ensureSkin));
+    collectionMethods++;
+}
+MethodDefinition demoSetSkin = Find("PlayerCharacterDemo", "SetSkin", 1);
+InsertPrologue(demoSetSkin,
+    Instruction.Create(OpCodes.Ldarg_0),
+    Instruction.Create(OpCodes.Ldarg_1),
+    Instruction.Create(OpCodes.Call, Hook("DxSkin", "OnDemoSkin")));
+MethodDefinition setScarf = Find("PlayerEffects", "SetActiveScarf", 1);
+{
+    setScarf.Body.SimplifyMacros();
+    ILProcessor il = setScarf.Body.GetILProcessor();
+    Instruction first = setScarf.Body.Instructions[0];
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ldarg_0));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ldarg_1));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Call, Hook("DxSkin", "Scarf")));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Starg, setScarf.Parameters[0]));
+    setScarf.Body.OptimizeMacros();
+}
+FieldDefinition renderField = module.GetType("CharacterBase").Fields.Single(f => f.Name == "render");
+MethodReference swap = Hook("DxSkin", "Swap");
+foreach (string typeName in new[] { "PlayerCharacter", "PlayerCharacterDemo" })
+{
+    TypeDefinition type = module.GetType(typeName);
+    for (TypeDefinition t = type; t != null && t.FullName != "UnityEngine.MonoBehaviour"; t = t.BaseType?.Resolve())
+    {
+        if (t.Methods.Any(m => m.Name == "LateUpdate"))
+        {
+            return Fail(t.FullName + " already has a LateUpdate; hook it instead of adding one");
+        }
+    }
+    MethodDefinition late = new MethodDefinition("LateUpdate", MethodAttributes.Private | MethodAttributes.HideBySig, module.TypeSystem.Void);
+    ILProcessor il = late.Body.GetILProcessor();
+    il.Append(Instruction.Create(OpCodes.Ldarg_0));
+    il.Append(Instruction.Create(OpCodes.Ldarg_0));
+    il.Append(Instruction.Create(OpCodes.Ldfld, renderField));
+    il.Append(Instruction.Create(OpCodes.Call, swap));
+    il.Append(Instruction.Create(OpCodes.Ret));
+    type.Methods.Add(late);
+}
+Console.WriteLine("Halloween skin hooks: " + collectionMethods + " PlayerSkinsCollection methods, SetSkin, SetActiveScarf, 2 LateUpdate");
+
 // --- Free floors: level end / level start / Ekin death.
 MethodDefinition endLevel = Find("LevelManager", "EndCurrentLevel", 1);
 InsertPrologue(endLevel,
