@@ -593,6 +593,25 @@ MethodDefinition meditateTrance = module.GetType("PlayerCombat").Methods.Single(
     meditateTrance.Body.OptimizeMacros();
 }
 
+// --- Zone intro: skipping it inside its 0.5 s start delay left the zone art on screen for good (see DxCutscene).
+// `if (DxCutscene.StartCancelled(this.<>4__this)) return;` in the delayed start.
+{
+    TypeDefinition intro = module.GetType("IntroductionCutscene");
+    TypeDefinition closure = intro.NestedTypes.Single(t => t.Methods.Any(m => m.Name == "<PlaySequence>b__0"));
+    MethodDefinition delayedStart = closure.Methods.Single(m => m.Name == "<PlaySequence>b__0");
+    FieldDefinition owner = closure.Fields.Single(f => f.FieldType.FullName == "IntroductionCutscene");
+    delayedStart.Body.SimplifyMacros();
+    ILProcessor il = delayedStart.Body.GetILProcessor();
+    Instruction first = delayedStart.Body.Instructions[0];
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ldarg_0));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ldfld, owner));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Call, Hook("DxCutscene", "StartCancelled")));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Brfalse, first));
+    il.InsertBefore(first, Instruction.Create(OpCodes.Ret));
+    delayedStart.Body.OptimizeMacros();
+    Console.WriteLine("Zone intro skip guard installed");
+}
+
 TypeDefinition settingsPanel = module.GetType("SettingsPanel");
 FieldDefinition Field(string name) => settingsPanel.Fields.Single(f => f.Name == name);
 MethodDefinition panelStart = settingsPanel.Methods.Single(m => m.Name == "Start" && m.Parameters.Count == 0);

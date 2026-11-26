@@ -83,6 +83,10 @@ helper uses still exists in the stripped assemblies, and always patches a fresh 
 - **Mark follows the Denial boss** - the floor 10 boss (`Boss_Smoke`) has no body of its own (smoke cells move around
   and one is vulnerable); a Mark was parented to its fixed root and stayed on the ground. `DxBoss` re-parents
   the mark effect to the vulnerable cell (the Windows build overrides `ApplyMark` for this boss).
+- **Zone intro cannot stick** - the zone intro art starts animating 0.5 s after it is shown; skipping it (Accept
+  twice) inside that delay ended the sequence first, the animation then played anyway and its end event was
+  ignored, so the art covered the game for the rest of the session while play went on under it. `DxCutscene`
+  drops the delayed start once the sequence has ended and logs it to `Player.log`.
 - **New skill slot cue** - the Windows build animates a freshly gained slot with a new outline shader/material
   that the Linux data lacks; `DxSlot` blinks the slot's outline instead.
 - **Glyph set is only glyphs** - `InputHandler.PromptSwitchInversion` (which swapped A/B and X/Y for the Switch
